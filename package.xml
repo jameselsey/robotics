@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>robotics</name>
+  <version>0.0.1</version>
+  <description>Joystick launch for robot</description>
+
+  <maintainer email="jelsey@example.com">You</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>joy</exec_depend>
+</package>
