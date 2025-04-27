@@ -1,32 +1,25 @@
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Twist
-import RPi.GPIO as GPIO
-import time
+from gpiozero import DigitalOutputDevice, PWMOutputDevice
 
 class DriveController(Node):
     def __init__(self):
         super().__init__('drive_controller')
         self.get_logger().info("Drive controller starting...")
 
-        # Define motor control pins
-        self.LEFT_IN1 = 17
-        self.LEFT_IN2 = 27
-        self.RIGHT_IN3 = 22
-        self.RIGHT_IN4 = 23
-        self.LEFT_PWM = 18
-        self.RIGHT_PWM = 13
+        # Define motor control pins using gpiozero
+        self.left_in1 = DigitalOutputDevice(17)
+        self.left_in2 = DigitalOutputDevice(27)
+        self.right_in3 = DigitalOutputDevice(22)
+        self.right_in4 = DigitalOutputDevice(23)
 
-        # GPIO setup
-        GPIO.setmode(GPIO.BCM)
-        GPIO.setup([self.LEFT_IN1, self.LEFT_IN2, self.RIGHT_IN3, self.RIGHT_IN4], GPIO.OUT)
-        GPIO.setup([self.LEFT_PWM, self.RIGHT_PWM], GPIO.OUT)
+        self.left_pwm = PWMOutputDevice(18, frequency=100)
+        self.right_pwm = PWMOutputDevice(13, frequency=100)
 
-        self.pwm_left = GPIO.PWM(self.LEFT_PWM, 100)
-        self.pwm_right = GPIO.PWM(self.RIGHT_PWM, 100)
-
-        self.pwm_left.start(0)
-        self.pwm_right.start(0)
+        # Start with motors off
+        self.left_pwm.value = 0
+        self.right_pwm.value = 0
 
         self.sub = self.create_subscription(Twist, '/cmd_vel', self.cmd_callback, 10)
 
@@ -41,23 +34,23 @@ class DriveController(Node):
         self.drive_motor('right', right_speed)
 
     def drive_motor(self, side, speed):
-        direction = GPIO.HIGH if speed >= 0 else GPIO.LOW
-        duty = min(abs(speed) * 100, 100)
+        direction = speed >= 0
+        duty = min(abs(speed), 1.0)  # gpiozero PWM value is 0.0–1.0
 
         if side == 'left':
-            GPIO.output(self.LEFT_IN1, direction)
-            GPIO.output(self.LEFT_IN2, not direction)
-            self.pwm_left.ChangeDutyCycle(duty)
+            self.left_in1.value = direction
+            self.left_in2.value = not direction
+            self.left_pwm.value = duty
         elif side == 'right':
-            GPIO.output(self.RIGHT_IN3, direction)
-            GPIO.output(self.RIGHT_IN4, not direction)
-            self.pwm_right.ChangeDutyCycle(duty)
+            self.right_in3.value = direction
+            self.right_in4.value = not direction
+            self.right_pwm.value = duty
 
     def destroy_node(self):
         self.get_logger().info("Stopping motors and cleaning up...")
-        self.pwm_left.stop()
-        self.pwm_right.stop()
-        GPIO.cleanup()
+        self.left_pwm.value = 0
+        self.right_pwm.value = 0
+        # Devices will auto-cleanup on exit
         super().destroy_node()
 
 def main():
