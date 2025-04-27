@@ -4,6 +4,10 @@
   <version>0.0.1</version>
   <description>Joystick launch for robot</description>
 
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+
   <maintainer email="jelsey@example.com">James Elsey</maintainer>
   <license>MIT</license>
 
