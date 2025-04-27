@@ -1,3 +1,5 @@
+.PHONY: build
+
 build:
 	colcon build
 	@echo "✅ Build complete."
