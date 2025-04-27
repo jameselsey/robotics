@@ -9,3 +9,6 @@ build: clean
 
 launch-joystick:
 	@bash -c "source install/setup.bash && ros2 launch joystick joystick.launch.py"
+
+launch-bridge:
+	@bash -c "source install/setup.bash && ros2 launch foxglove_bridge_launcher bridge.launch.py"
