@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>bringup</name>
+  <version>0.0.1</version>
+  <description>Bringup for joystick and foxglove bridge</description>
+
+  <maintainer email="jelsey@example.com">James Elsey</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <exec_depend>joy</exec_depend>
+  <exec_depend>joystick</exec_depend>
+  <exec_depend>foxglove_bridge</exec_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
