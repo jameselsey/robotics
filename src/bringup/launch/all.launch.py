@@ -1,25 +1,25 @@
 from launch import LaunchDescription
+from launch.actions import IncludeLaunchDescription
+from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node
-from launch.substitutions import LaunchConfiguration
-from launch.actions import DeclareLaunchArgument
-
-import os
 from ament_index_python.packages import get_package_share_directory
+import os
 
 def generate_launch_description():
-    # Joystick launch
-    joystick_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(
-                get_package_share_directory('joystick'),
-                'launch',
-                'joystick.launch.py'
-            )
-        )
+    # Get the path to the joystick launch file
+    joystick_launch_path = os.path.join(
+        get_package_share_directory('joystick'),
+        'launch',
+        'joystick.launch.py'
     )
 
-    # Foxglove bridge node
-    foxglove_bridge = Node(
+    # Create an inclusion action for the joystick launch
+    joystick_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(joystick_launch_path)
+    )
+
+    # Define the foxglove_bridge node
+    foxglove_bridge_node = Node(
         package='foxglove_bridge',
         executable='foxglove_bridge',
         name='foxglove_bridge',
@@ -29,5 +29,5 @@ def generate_launch_description():
 
     return LaunchDescription([
         joystick_launch,
-        foxglove_bridge
+        foxglove_bridge_node
     ])

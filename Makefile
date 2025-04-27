@@ -13,5 +13,5 @@ launch-joystick:
 launch-bridge:
 	@bash -c "source install/setup.bash && ros2 launch foxglove_bridge_launcher bridge.launch.py"
 
-launch-bringup:
+launch:
 	@bash -c "source install/setup.bash && ros2 launch bringup all.launch.py"
