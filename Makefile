@@ -13,5 +13,8 @@ launch-joystick:
 launch-bridge:
 	@bash -c "source install/setup.bash && ros2 launch foxglove_bridge_launcher bridge.launch.py"
 
+launch-drive:
+	@bash -c "source install/setup.bash && ros2 launch drive_controller drive_controller.launch.py"
+
 launch:
 	@bash -c "source install/setup.bash && ros2 launch bringup all.launch.py"

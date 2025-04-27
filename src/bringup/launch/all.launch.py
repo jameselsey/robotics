@@ -27,7 +27,16 @@ def generate_launch_description():
         parameters=[{'port': 8765}]
     )
 
+    # Drive controller node
+    drive_controller_node = Node(
+        package='drive_controller',
+        executable='drive_controller',
+        name='drive_controller',
+        output='screen'
+    )
+
     return LaunchDescription([
         joystick_launch,
-        foxglove_bridge_node
+        foxglove_bridge_node,
+        drive_controller_node
     ])
