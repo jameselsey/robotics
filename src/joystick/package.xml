@@ -12,4 +12,5 @@
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
   <exec_depend>joy</exec_depend>
+  <exec_depend>teleop_twist_joy</exec_depend>
 </package>

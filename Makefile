@@ -1,8 +1,11 @@
-.PHONY: build
+.PHONY: clean build launch-joystick
 
-build:
-	colcon build
+clean:
+	rm -rf build/ install/ log/
+
+build: clean
+	colcon build --symlink-install
 	@echo "✅ Build complete."
 
 launch-joystick:
-	source install/setup.bash && ros2 launch joystick joystick.launch.py
+	@bash -c "source install/setup.bash && ros2 launch joystick joystick.launch.py"
