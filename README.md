@@ -48,7 +48,8 @@ sudo apt install -y \
   ros-jazzy-ros-base \
   '~nros-jazzy-rqt*' \
   ros-jazzy-teleop-twist-joy \
-  ros-jazzy-tf-transformations 
+  ros-jazzy-tf-transformations \
+  ros-jazzy-xacro 
 
 ```
 

@@ -51,7 +51,7 @@ def generate_launch_description():
         name='robot_state_publisher',
         parameters=[{
             'robot_description': Command([
-                'xacro ',
+                'xacro',
                 PathJoinSubstitution([
                     FindPackageShare('tank_description'),
                     'urdf',
