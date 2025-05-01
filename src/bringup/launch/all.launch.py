@@ -35,6 +35,22 @@ def generate_launch_description():
         output='screen'
     )
 
+    # robot description node to get the urdf onto /robot_description
+    # foxglove will need this if you want the model available
+    urdf_path = os.path.join(
+        get_package_share_directory('tank_description'),
+        'urdf',
+        'robot.urdf.xacro'
+    )
+    robot_description_node = Node(
+        package='robot_state_publisher',
+        executable='robot_state_publisher',
+        name='robot_state_publisher',
+        parameters=[{
+            'robot_description': open(urdf_path).read()
+        }]
+    )
+
     return LaunchDescription([
         joystick_launch,
         foxglove_bridge_node,

@@ -1,13 +1,14 @@
 <?xml version="1.0"?>
-<robot name="xiaor_geek_tank">
+<robot name="xiaor_geek_tank_colored">
 
-  <!-- Main chassis -->
+  <!-- Main chassis (raised) -->
   <link name="base_link">
     <visual>
       <geometry>
         <box size="0.30 0.20 0.05"/> <!-- 30cm x 20cm x 5cm -->
       </geometry>
-      <material name="green">
+      <origin xyz="0 0 0.05"/> <!-- raise it above the tracks -->
+      <material name="silver">
         <color rgba="0.7 0.7 0.7 1.0"/>
       </material>
     </visual>
@@ -15,10 +16,11 @@
       <geometry>
         <box size="0.30 0.20 0.05"/>
       </geometry>
+      <origin xyz="0 0 0.05"/>
     </collision>
     <inertial>
       <mass value="2.0"/>
-      <origin xyz="0 0 0"/>
+      <origin xyz="0 0 0.05"/>
       <inertia ixx="0.1" ixy="0.0" ixz="0.0"
                iyy="0.1" iyz="0.0"
                izz="0.1"/>
@@ -31,7 +33,7 @@
       <geometry>
         <box size="0.30 0.03 0.05"/>
       </geometry>
-      <material name="blue">
+      <material name="black">
         <color rgba="0.1 0.1 0.1 1.0"/>
       </material>
     </visual>
@@ -48,7 +50,9 @@
       <geometry>
         <box size="0.30 0.03 0.05"/>
       </geometry>
-      <material name="red"/>
+      <material name="black_track">
+        <color rgba="0.15 0.15 0.15 1.0"/>
+      </material>
     </visual>
   </link>
   <joint name="right_track_joint" type="fixed">
@@ -63,15 +67,15 @@
       <geometry>
         <cylinder radius="0.03" length="0.02"/>
       </geometry>
-      <material name="dark_gray">
-        <color rgba="0.2 0.2 0.2 1.0"/>
+      <material name="red_wheel">
+        <color rgba="1.0 0.2 0.2 1.0"/>
       </material>
     </visual>
   </link>
   <joint name="left_wheel_joint" type="fixed">
     <parent link="base_link"/>
     <child link="left_wheel"/>
-    <origin xyz="-0.11 0.115 -0.025" rpy="0 1.5708 0"/>
+    <origin xyz="-0.11 0.13 0" rpy="1.5708 0 0"/>
   </joint>
 
   <!-- Right drive wheel -->
@@ -80,13 +84,15 @@
       <geometry>
         <cylinder radius="0.03" length="0.02"/>
       </geometry>
-      <material name="dark_gray"/>
+      <material name="red_wheel">
+        <color rgba="1.0 0.2 0.2 1.0"/>
+      </material>
     </visual>
   </link>
   <joint name="right_wheel_joint" type="fixed">
     <parent link="base_link"/>
     <child link="right_wheel"/>
-    <origin xyz="-0.11 -0.115 -0.025" rpy="0 1.5708 0"/>
+    <origin xyz="-0.11 -0.13 0" rpy="1.5708 0 0"/>
   </joint>
 
   <!-- Left idler wheel -->
@@ -95,15 +101,15 @@
       <geometry>
         <cylinder radius="0.03" length="0.02"/>
       </geometry>
-      <material name="gray">
-        <color rgba="0.3 0.3 0.3 1.0"/>
+      <material name="green_idler">
+        <color rgba="0.2 1.0 0.2 1.0"/>
       </material>
     </visual>
   </link>
   <joint name="left_idler_joint" type="fixed">
     <parent link="base_link"/>
     <child link="left_idler"/>
-    <origin xyz="0.11 0.115 -0.025" rpy="0 1.5708 0"/>
+    <origin xyz="0.11 0.13 0" rpy="1.5708 0 0"/>
   </joint>
 
   <!-- Right idler wheel -->
@@ -112,13 +118,15 @@
       <geometry>
         <cylinder radius="0.03" length="0.02"/>
       </geometry>
-      <material name="gray"/>
+      <material name="green_idler">
+        <color rgba="0.2 1.0 0.2 1.0"/>
+      </material>
     </visual>
   </link>
   <joint name="right_idler_joint" type="fixed">
     <parent link="base_link"/>
     <child link="right_idler"/>
-    <origin xyz="0.11 -0.115 -0.025" rpy="0 1.5708 0"/>
+    <origin xyz="0.11 -0.13 0" rpy="1.5708 0 0"/>
   </joint>
 
 </robot>

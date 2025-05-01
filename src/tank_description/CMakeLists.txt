@@ -1,16 +1,10 @@
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.10)
 project(tank_description)
 
 find_package(ament_cmake REQUIRED)
 
-# Install package.xml
-install(FILES package.xml
-  DESTINATION share/${PROJECT_NAME}
-)
-
-# Install config and launch
 install(
-  DIRECTORY launch urdf
+  DIRECTORY urdf launch
   DESTINATION share/${PROJECT_NAME}
 )
 
