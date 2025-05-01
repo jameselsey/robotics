@@ -54,5 +54,6 @@ def generate_launch_description():
     return LaunchDescription([
         joystick_launch,
         foxglove_bridge_node,
-        drive_controller_node
+        drive_controller_node,
+        robot_description_node
     ])
