@@ -43,21 +43,14 @@ def generate_launch_description():
     urdf_path = os.path.join(
         get_package_share_directory('tank_description'),
         'urdf',
-        'robot.urdf.xacro'
+        'robot.urdf'
     )
     robot_description_node = Node(
         package='robot_state_publisher',
         executable='robot_state_publisher',
         name='robot_state_publisher',
         parameters=[{
-            'robot_description': Command([
-                'xacro',
-                PathJoinSubstitution([
-                    FindPackageShare('tank_description'),
-                    'urdf',
-                    'robot.urdf.xacro'
-                ])
-            ])
+            'robot_description': open(urdf_path).read()
         }]
     )
 

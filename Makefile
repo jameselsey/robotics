@@ -4,6 +4,8 @@ clean:
 	rm -rf build/ install/ log/
 
 build: clean
+	# we have to compile the urdf file from the xacro, because urdf is what foxglove requires
+	ros2 run xacro xacro src/tank_description/urdf/robot.urdf.xacro > src/tank_description/urdf/robot.urdf
 	colcon build --symlink-install
 	@echo "✅ Build complete."
 
