@@ -3,7 +3,6 @@ A collection of robotics projects that I have been tinkering with to learn more.
 
 # Table of Contents
 
-- [robotics](#robotics)
 - [How to set this project up](#how-to-set-this-project-up)
   - [Prerequisites on the Pi5](#prerequisites-on-the-pi5)
   - [Ros2 Setup](#ros2-setup)
@@ -13,10 +12,10 @@ A collection of robotics projects that I have been tinkering with to learn more.
   - [Foxglove](#foxglove)
 
 # How to set this project up
-=========================
+(this will become much easier when I find the time to Docker-ise it, but for now, we'll just install directly onto the host system)
 
 ## Prerequisites on the Pi5
-----
+
 Firstly setup SSH, so we can connect to the pi from our laptop.
 ```bash
 sudo apt update
@@ -35,7 +34,7 @@ Copy the output of that public key, then add to your github, under `Settings > S
 
 
 ## Ros2 Setup
----
+
 I took all these commands from the [official ros2 setup guide](https://docs.ros.org/en/jazzy/Installation/Ubuntu-Install-Debs.html), I just added the `-y` and put them into a single script so it's easier to run, it also takes nearly an hour so run this and grab a coffee
 
 ```bash
@@ -79,7 +78,7 @@ echo "source /opt/ros/jazzy/setup.bash" >> ~/.bashrc && source ~/.bashrc
 ```
 
 ## Robotics codebase 
----
+
 
 Clone the repo
 ```bash
@@ -95,7 +94,7 @@ make lauch
 ```
 
 ## Cameras
----
+
 To use a camera, we need to install and configure some additional packages.
 
 ```bash
@@ -104,16 +103,17 @@ sudo apt install -y v4l-utils ros-jazzy-v4l2-camera
 ```
 
 ## Joystick
-----
+
 Launch using `ros2 launch robotics joystick.launch.py`
 
 ## Foxglove
-----
+
 Make sure you have foxglove installed. You can install it using the following command:
 ```bash
 sudo apt install ros-jazzy-foxglove-bridge
 ```
 
+# How to run
 Then run the foxglove bridge itself using `make launch-bridge`, this will just run the bridge and
 you can then connect like `ws://pi5:8765`
 
