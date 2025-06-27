@@ -9,15 +9,24 @@ import io
 import time
 import requests
 import wave
+import signal
+import sys
 
 # Load Whisper
 whisper_model = whisper.load_model("base")
 
-# Setup audio input
+# Setup constants
 CHUNK_DURATION = 0.5  # seconds per chunk
-LISTEN_TIMEOUT = 5    # seconds max to wait after wake word
+SILENCE_THRESHOLD = 200
+SILENCE_DURATION = 2.0
 
-def record_command(pa, sample_rate, chunk_size, silence_threshold=200, silence_duration=2.0):
+def handle_interrupt(sig, frame):
+    print("\n👋 Caught interrupt, exiting cleanly...")
+    sys.exit(0)
+
+signal.signal(signal.SIGINT, handle_interrupt)
+
+def record_command(pa, sample_rate, chunk_size, silence_threshold=SILENCE_THRESHOLD, silence_duration=SILENCE_DURATION):
     stream = pa.open(
         rate=sample_rate,
         channels=1,
@@ -79,20 +88,21 @@ def transcribe_audio(wav_buffer, original_sample_rate):
     result = whisper.decode(whisper_model, mel, options)
     return result.text.strip()
 
-
 def send_to_ollama(prompt):
     print(f"🤖 Sending to Ollama: {prompt}")
     response = requests.post(
         os.environ["OLLAMA_API_URL"].rstrip('/') + "/api/generate",
         json={
-            "model": "tinyllama",  # Or whatever model you're running locally
+            "model": "tinyllama",
             "prompt": prompt,
             "stream": False
         }
     )
-    # Parse JSON body
-    response_json = response.json()
-    print(f"🧠 Ollama replied: {response_json['response']}")
+    if response.ok:
+        response_json = response.json()
+        print(f"🧠 Ollama replied: {response_json['response']}")
+    else:
+        print(f"❌ Ollama error: {response.status_code} {response.text}")
 
 def main():
     porcupine = pvporcupine.create(
@@ -102,49 +112,61 @@ def main():
     )
 
     pa = pyaudio.PyAudio()
-    stream = pa.open(
-        rate=porcupine.sample_rate,
-        channels=1,
-        format=pyaudio.paInt16,
-        input=True,
-        frames_per_buffer=porcupine.frame_length
-    )
 
     print("👂 Listening for wake word...")
 
     try:
         while True:
-            pcm = stream.read(porcupine.frame_length, exception_on_overflow=False)
-            pcm_unpacked = struct.unpack_from("h" * porcupine.frame_length, pcm)
+            stream = pa.open(
+                rate=porcupine.sample_rate,
+                channels=1,
+                format=pyaudio.paInt16,
+                input=True,
+                frames_per_buffer=porcupine.frame_length
+            )
 
-            if porcupine.process(pcm_unpacked) >= 0:
-                print("✅ Wake word detected!")
-                raw_audio = record_command(pa, porcupine.sample_rate, int(porcupine.sample_rate * CHUNK_DURATION))
-                raw_audio.seek(0, io.SEEK_END)
-                size_in_bytes = raw_audio.tell()
-                raw_audio.seek(0)
+            try:
+                while True:
+                    pcm = stream.read(porcupine.frame_length, exception_on_overflow=False)
+                    pcm_unpacked = struct.unpack_from("h" * porcupine.frame_length, pcm)
 
-                # 2 bytes per sample, mono channel
-                num_samples = size_in_bytes // 2
-                if num_samples < porcupine.sample_rate * 2:
-                    print("⏱️ No speech detected.")
-                    continue
+                    if porcupine.process(pcm_unpacked) >= 0:
+                        print("✅ Wake word detected!")
+                        break  # Exit inner loop to start recording
 
-                try:
-                    transcript = transcribe_audio(raw_audio, porcupine.sample_rate)
-                    if transcript:
-                        print(f"🗣️ You said: {transcript}")
-                        send_to_ollama(transcript)
-                    else:
-                        print("🤐 No transcribable speech detected.")
-                except Exception as e:
-                    print(f"❌ Error during transcription: {e}")
+            finally:
+                stream.stop_stream()
+                stream.close()
+
+            raw_audio = record_command(
+                pa,
+                porcupine.sample_rate,
+                int(porcupine.sample_rate * CHUNK_DURATION)
+            )
+
+            raw_audio.seek(0, io.SEEK_END)
+            size_in_bytes = raw_audio.tell()
+            raw_audio.seek(0)
+
+            num_samples = size_in_bytes // 2
+            if num_samples < porcupine.sample_rate * 2:
+                print("⏱️ No speech detected.")
+                continue
+
+            try:
+                transcript = transcribe_audio(raw_audio, porcupine.sample_rate)
+                if transcript:
+                    print(f"🗣️ You said: {transcript}")
+                    send_to_ollama(transcript)
+                else:
+                    print("🤐 No transcribable speech detected.")
+            except Exception as e:
+                print(f"❌ Error during transcription: {e}")
 
     except KeyboardInterrupt:
         print("👋 Exiting...")
+
     finally:
-        stream.stop_stream()
-        stream.close()
         pa.terminate()
         porcupine.delete()
 
