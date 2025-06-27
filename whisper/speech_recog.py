@@ -83,10 +83,16 @@ def transcribe_audio(wav_buffer, original_sample_rate):
 def send_to_ollama(prompt):
     print(f"🤖 Sending to Ollama: {prompt}")
     response = requests.post(
-        os.environ["OLLAMA_API_URL"],
-        json={"prompt": prompt}
+        os.environ["OLLAMA_API_URL"].rstrip('/') + "/api/generate",
+        json={
+            "model": "tinyllama",  # Or whatever model you're running locally
+            "prompt": prompt,
+            "stream": False
+        }
     )
-    print(f"🧠 Ollama replied: {response.text}")
+    # Parse JSON body
+    response_json = response.json()
+    print(f"🧠 Ollama replied: {response_json['response']}")
 
 def main():
     porcupine = pvporcupine.create(
