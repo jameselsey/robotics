@@ -9,3 +9,4 @@ soundfile
 librosa
 pvporcupine
 pyaudio
+pyttsx3

@@ -11,9 +11,14 @@ import requests
 import wave
 import signal
 import sys
+import pyttsx3
+
 
 # Load Whisper
 whisper_model = whisper.load_model("base")
+
+# load TTS engine
+tts_engine = pyttsx3.init()
 
 # Setup constants
 CHUNK_DURATION = 0.5  # seconds per chunk
@@ -25,6 +30,11 @@ def handle_interrupt(sig, frame):
     sys.exit(0)
 
 signal.signal(signal.SIGINT, handle_interrupt)
+
+def speak(text: str):
+    print(f"🗣️ Speaking: {text}")
+    tts_engine.say(text)
+    tts_engine.runAndWait()
 
 def record_command(pa, sample_rate, chunk_size, silence_threshold=SILENCE_THRESHOLD, silence_duration=SILENCE_DURATION):
     stream = pa.open(
@@ -101,6 +111,7 @@ def send_to_ollama(prompt):
     if response.ok:
         response_json = response.json()
         print(f"🧠 Ollama replied: {response_json['response']}")
+        speak(response_json['response'])
     else:
         print(f"❌ Ollama error: {response.status_code} {response.text}")
 
