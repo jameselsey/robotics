@@ -54,9 +54,15 @@ def generate_launch_description():
         }]
     )
 
+    senses_share_dir = get_package_share_directory('senses')
+    eyes_launch_path = os.path.join(senses_share_dir, 'launch', 'senses.launch.py')
+
     return LaunchDescription([
         joystick_launch,
         foxglove_bridge_node,
         drive_controller_node,
-        robot_description_node
+        robot_description_node,
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(eyes_launch_path)
+        ),
     ])
