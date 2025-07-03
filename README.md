@@ -1,27 +1,21 @@
 # robotics
-Robotic experiments!
+A collection of robotics projects that I have been tinkering with to learn more.
 
-Joystick
-----
-Launch using `ros2 launch robotics joystick.launch.py`
+# Table of Contents
 
-Foxglove
-----
-Make sure you have foxglove installed. You can install it using the following command:
-```bash
-sudo apt install ros-jazzy-foxglove-bridge
-```
+- [How to set this project up](#how-to-set-this-project-up)
+  - [Prerequisites on the Pi5](#prerequisites-on-the-pi5)
+  - [Ros2 Setup](#ros2-setup)
+  - [Robotics codebase](#robotics-codebase)
+  - [Cameras](#cameras)
+  - [Joystick](#joystick)
+  - [Foxglove](#foxglove)
 
-Then run the foxglove bridge itself using `make launch-bridge`, this will just run the bridge and
-you can then connect like `ws://pi5:8765`
+# How to set this project up
+(this will become much easier when I find the time to Docker-ise it, but for now, we'll just install directly onto the host system)
 
-It isn't particularly useful on it's own, so run the "bringup" which will launch all components, so you can control it and see sensor data etc
+## Prerequisites on the Pi5
 
-How to set this project up
-=========================
-
-Prerequisites on the Pi5
-----
 Firstly setup SSH, so we can connect to the pi from our laptop.
 ```bash
 sudo apt update
@@ -39,8 +33,8 @@ Copy the output of that public key, then add to your github, under `Settings > S
 
 
 
-Ros2 Setup
----
+## Ros2 Setup
+
 I took all these commands from the [official ros2 setup guide](https://docs.ros.org/en/jazzy/Installation/Ubuntu-Install-Debs.html), I just added the `-y` and put them into a single script so it's easier to run, it also takes nearly an hour so run this and grab a coffee
 
 ```bash
@@ -83,8 +77,8 @@ Then run this to add ros to your terminal, this means you can run `ros2` when yo
 echo "source /opt/ros/jazzy/setup.bash" >> ~/.bashrc && source ~/.bashrc
 ```
 
-Robotics codebase 
----
+## Robotics codebase 
+
 
 Clone the repo
 ```bash
@@ -99,17 +93,31 @@ make build
 make lauch
 ```
 
+## Cameras
 
-
-Cameras
----
 To use a camera, we need to install and configure some additional packages.
 
 ```bash
 sudo apt update
 sudo apt install -y v4l-utils ros-jazzy-v4l2-camera
-
 ```
+
+## Joystick
+
+Launch using `ros2 launch robotics joystick.launch.py`
+
+## Foxglove
+
+Make sure you have foxglove installed. You can install it using the following command:
+```bash
+sudo apt install ros-jazzy-foxglove-bridge
+```
+
+# How to run
+Then run the foxglove bridge itself using `make launch-bridge`, this will just run the bridge and
+you can then connect like `ws://pi5:8765`
+
+It isn't particularly useful on it's own, so run the "bringup" which will launch all components, so you can control it and see sensor data etc
 
 
 

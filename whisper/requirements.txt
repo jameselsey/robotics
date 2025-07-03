@@ -1,0 +1,12 @@
+openai-whisper
+setuptools-rust
+speechrecognition
+torch
+torchaudio
+numpy
+pyaudio
+soundfile
+librosa
+pvporcupine
+pyaudio
+pyttsx3
