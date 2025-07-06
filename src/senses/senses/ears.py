@@ -12,12 +12,14 @@ import pyaudio
 import pvporcupine
 import whisper
 import time
+from playsound import playsound
 
 class Ears(Node):
     def __init__(self):
         super().__init__('ears')
         self.publisher_ = self.create_publisher(String, 'speech_input', 10)
         self.get_logger().info('Ears node has been started.')
+
 
         # Initialize Porcupine wake word engine
         package_dir = get_package_share_directory('senses')
@@ -32,6 +34,8 @@ class Ears(Node):
             keyword_paths=[keyword_path],
             sensitivities=[0.7]
         )
+
+        self.sound_path = os.path.join(package_dir, 'resource', 'r2-sound-acknowledged.mp3')
 
         # Initialize PyAudio
         self.pa = pyaudio.PyAudio()
@@ -62,6 +66,7 @@ class Ears(Node):
 
                         if self.porcupine.process(pcm_unpacked) >= 0:
                             self.get_logger().info("✅ Wake word detected!")
+                            playsound(self.sound_path, block=False)
                             break  # Exit inner loop to start recording
 
                 finally:
