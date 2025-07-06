@@ -8,6 +8,9 @@ def generate_launch_description():
             executable='foxglove_bridge',
             name='foxglove_bridge',
             output='screen',
-            parameters=[{'port': 8765}]  # optional
+            parameters=[{
+                'port': 8765,
+                'use_compression': 'true'
+            }]  # optional
         )
     ])
