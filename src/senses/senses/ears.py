@@ -41,7 +41,7 @@ class Ears(Node):
         self.pa = pyaudio.PyAudio()
 
         # Load Whisper model
-        self.whisper_model = whisper.load_model("base")
+        self.whisper_model = whisper.load_model("tiny")
 
         # Start listening
         self.listen_for_wake_word()
@@ -75,7 +75,7 @@ class Ears(Node):
 
                 raw_audio = self.record_command(
                     self.porcupine.sample_rate,
-                    int(self.porcupine.sample_rate * 0.5)
+                    int(self.porcupine.sample_rate * 0.25)
                 )
 
                 raw_audio.seek(0, io.SEEK_END)
@@ -106,7 +106,7 @@ class Ears(Node):
             self.pa.terminate()
             self.porcupine.delete()
 
-    def record_command(self, sample_rate, chunk_size, silence_threshold=300, silence_duration=1.5):
+    def record_command(self, sample_rate, chunk_size, silence_threshold=300, silence_duration=0.8):
         stream = self.pa.open(
             rate=sample_rate,
             channels=1,
