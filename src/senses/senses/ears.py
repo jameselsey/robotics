@@ -1,7 +1,7 @@
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
-
+from ament_index_python.packages import get_package_share_directory
 import os
 import struct
 import io
@@ -20,14 +20,16 @@ class Ears(Node):
         self.get_logger().info('Ears node has been started.')
 
         # Initialize Porcupine wake word engine
-        access_key = os.getenv("PORCUPINE_ACCESS_KEY")
-        if not access_key:
+        package_dir = get_package_share_directory('senses')
+        keyword_path = os.path.join(package_dir, 'resource', 'Hey-R-Two_en_raspberry-pi_v3_0_0.ppn')
+        porcupine_access_key = os.environ.get("PORCUPINE_ACCESS_KEY")
+        if not porcupine_access_key:
             self.get_logger().error("PORCUPINE_ACCESS_KEY environment variable not set.")
             return
 
         self.porcupine = pvporcupine.create(
-            access_key=access_key,
-            keyword_paths=["Hey-R-two_en_mac_v3_0_0.ppn"],
+            access_key=porcupine_access_key,
+            keyword_paths=[keyword_path],
             sensitivities=[0.7]
         )
 
@@ -49,7 +51,8 @@ class Ears(Node):
                     channels=1,
                     format=pyaudio.paInt16,
                     input=True,
-                    frames_per_buffer=self.porcupine.frame_length
+                    frames_per_buffer=self.porcupine.frame_length,
+                    input_device_index=0
                 )
 
                 try:
@@ -98,13 +101,14 @@ class Ears(Node):
             self.pa.terminate()
             self.porcupine.delete()
 
-    def record_command(self, sample_rate, chunk_size, silence_threshold=200, silence_duration=2.0):
+    def record_command(self, sample_rate, chunk_size, silence_threshold=300, silence_duration=1.5):
         stream = self.pa.open(
             rate=sample_rate,
             channels=1,
             format=pyaudio.paInt16,
             input=True,
-            frames_per_buffer=chunk_size
+            frames_per_buffer=chunk_size,
+            input_device_index=0
         )
 
         self.get_logger().info("🎙️ Listening for command (auto-stop on silence)...")

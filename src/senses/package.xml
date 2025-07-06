@@ -9,6 +9,9 @@
 
   <depend>rclpy</depend>
 
+  <exec_depend>ament_index_python</exec_depend>
+
+
   <exec_depend>python3-numpy</exec_depend>
   <exec_depend>python3-soundfile</exec_depend>
   <exec_depend>python3-pyaudio</exec_depend>
@@ -22,5 +25,6 @@
 
   <export>
     <build_type>ament_python</build_type>
+    <resource>senses</resource>
   </export>
 </package>
