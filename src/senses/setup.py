@@ -27,6 +27,7 @@ setup(
             'ears = senses.ears:main',
             'mouth = senses.mouth:main',
             'brain = senses.brain:main',
+            'screen = senses.screen:main',
         ],
     },
     package_data={

@@ -29,4 +29,9 @@ def generate_launch_description():
             executable='brain',
             name='brain'
         ),
+        Node(
+            package='senses',
+            executable='screen',
+            name='screen'
+        ),
     ])
