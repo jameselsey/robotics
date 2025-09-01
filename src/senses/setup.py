@@ -24,7 +24,7 @@ setup(
     entry_points={
         'console_scripts': [
             'eyes = senses.eyes:main',
-            'ears = senses.ears:main',
+            # 'ears = senses.ears:main',
             'mouth = senses.mouth:main',
             'brain = senses.brain:main',
             'screen = senses.screen:main',
