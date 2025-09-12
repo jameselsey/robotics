@@ -21,6 +21,13 @@ This is likely because the image data is too large and becomes a bottle neck.
 
 We can work around this creating a new topic that is a throttled version of the `/image_raw/compressed` topic, like this
 
+First install this if you havent
+```
+sudo apt install ros-jazzy-topic-tools
+```
+
+Then you'll be able to use the throttle nodes
+
 ```
         # Declare args (must be part of the LaunchDescription)
         DeclareLaunchArgument("image_in",          default_value="/image_raw/compressed"),
