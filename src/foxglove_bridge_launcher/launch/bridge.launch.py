@@ -10,7 +10,7 @@ def generate_launch_description():
             output='screen',
             parameters=[{
                 'port': 8765,
-                'use_compression': 'true'
+                'use_compression': True
             }]  # optional
         )
     ])
