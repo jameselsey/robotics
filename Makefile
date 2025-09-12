@@ -13,19 +13,16 @@ build: clean
 	@echo "✅ Build complete."
 
 launch-joystick:
-	@bash -c "source install/setup.bash && ros2 launch joystick joystick.launch.py"
-
-launch-bridge:
-	@bash -c "source install/setup.bash && ros2 launch foxglove_bridge_launcher bridge.launch.py"
+	@bash -c "source install/setup.bash && source ~/vendor_ws/install/setup.bash && ros2 launch joystick joystick.launch.py"
 
 launch-drive:
-	@bash -c "source install/setup.bash && ros2 launch drive_controller drive_controller.launch.py"
+	@bash -c "source install/setup.bash && source ~/vendor_ws/install/setup.bash && ros2 launch drive_controller drive_controller.launch.py"
 
 launch-senses:
 	@bash -c "source install/setup.bash && source ~/vendor_ws/install/setup.bash && ros2 launch senses senses.launch.py"
 
 launch:
-	@bash -c "source install/setup.bash && ros2 launch bringup all.launch.py"
+	@bash -c "source install/setup.bash && source ~/vendor_ws/install/setup.bash && ros2 launch bringup all.launch.py"
 
 docker:
 	# You may need to do these first, if it complains about permissions errors
