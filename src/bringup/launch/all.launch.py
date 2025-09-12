@@ -27,7 +27,23 @@ def generate_launch_description():
         executable='foxglove_bridge',
         name='foxglove_bridge',
         output='screen',
-        parameters=[{'port': 8765}]
+        parameters=[{
+            'port': 8765,
+            'use_compression': True,
+            'max_qos_depth': 1,
+            'send_buffer_limit_bytes':67108864,
+            # Expose only these topics to Foxglove (ECMAScript regex)
+            "topic_whitelist": [
+                r"^(.*/)?camera_info$",                                
+                r"^(.*/)?image_viz/compressed$",
+                r"^(.*/)?joint_states$",
+                r"^(.*/)?joy$",
+                r"^(.*/)?odom$",
+                r"^(.*/)?scan$",
+                r"^(.*/)?tf$",
+                r"^(.*/)?tf_static$",
+            ],
+        }]
     )
 
     # Drive controller node
