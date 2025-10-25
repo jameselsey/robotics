@@ -35,6 +35,7 @@ def generate_launch_description():
             # Expose only these topics to Foxglove (ECMAScript regex)
             "topic_whitelist": [
                 r"^(.*/)?camera_info$",                                
+                r"^(.*/)?cmd_vel$",
                 r"^(.*/)?image_viz/compressed$",
                 r"^(.*/)?joint_states$",
                 r"^(.*/)?joy$",
