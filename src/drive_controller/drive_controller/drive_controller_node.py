@@ -11,48 +11,73 @@ from gpiozero import DigitalOutputDevice, PWMOutputDevice, RotaryEncoder
 class DriveController(Node):
     def __init__(self):
         super().__init__('drive_controller')
-        self.get_logger().info("Drive controller with encoders starting...")
+        self.get_logger().info("Drive controller with encoders starting (BTS7960 mode)...")
 
         # ---- Parameters ----
-        self.declare_parameter('left_in1', 17)
-        self.declare_parameter('left_in2', 27)
-        self.declare_parameter('right_in3', 26)
-        self.declare_parameter('right_in4', 23)
-        self.declare_parameter('left_pwm_pin', 22)
-        self.declare_parameter('right_pwm_pin', 13)
+        # Reusing your existing pins
+        # LEFT: RPWM=22, LPWM=17, EN=27
+        # RIGHT: RPWM=13, LPWM=26, EN=23
+        self.declare_parameter('left_rpwm_pin', 22)
+        self.declare_parameter('left_lpwm_pin', 17)
+        self.declare_parameter('left_r_en_pin', -1)   # set -1 if hard-wired to 5V
+        self.declare_parameter('left_l_en_pin', -1)   # OK to tie both ENs together
 
-        # Encoder pins (A/B per wheel). Set to -1 to disable a wheel’s encoder.
+        self.declare_parameter('right_rpwm_pin', 13)
+        self.declare_parameter('right_lpwm_pin', 26)
+        self.declare_parameter('right_r_en_pin', -1)  # set -1 if hard-wired to 5V
+        self.declare_parameter('right_l_en_pin', -1)
+
+        # Encoders
         self.declare_parameter('left_enc_a', 24)
         self.declare_parameter('left_enc_b', 25)
         self.declare_parameter('right_enc_a', 5)
         self.declare_parameter('right_enc_b', 6)
-        # Debounce for encoder inputs (seconds). Set lower for hall/optical encoders.
         self.declare_parameter('enc_bounce_time', 0.0005)
 
-        # Robot kinematics
-        # measure from the axle to the middle of the tread (or use the drive sprocket pitch radius).
-        # Example: 52 mm radius → 0.052.
+        # Kinematics
         self.declare_parameter('wheel_radius_m', 0.026)
-        # wheel_base_m: measure centerline-to-centerline of the two tracks (not outer edge to outer edge).
-        # Example: 280 mm → 0.28
         self.declare_parameter('wheel_base_m', 0.185)
         self.declare_parameter('counts_per_rev', 2048)
+
+        # Odom / frames
         self.declare_parameter('odom_frame', 'odom')
         self.declare_parameter('base_frame', 'base_link')
         self.declare_parameter('odom_rate_hz', 50.0)
 
+        # Motion mapping & tuning
+        self.declare_parameter('vmax', 0.5)            # m/s -> 100% PWM at this speed
+        self.declare_parameter('linear_gain', 1.0)
+        self.declare_parameter('angular_gain', 1.0)
+        self.declare_parameter('left_enc_invert', False)
+        self.declare_parameter('right_enc_invert', False)
+        self.declare_parameter('log_steps', False)
+
         p = self.get_parameter
-        self.left_in1 = DigitalOutputDevice(p('left_in1').value)
-        self.left_in2 = DigitalOutputDevice(p('left_in2').value)
-        self.right_in3 = DigitalOutputDevice(p('right_in3').value)
-        self.right_in4 = DigitalOutputDevice(p('right_in4').value)
 
-        self.left_pwm = PWMOutputDevice(p('left_pwm_pin').value, frequency=100)
-        self.right_pwm = PWMOutputDevice(p('right_pwm_pin').value, frequency=100)
-        self.left_pwm.value = 0.0
-        self.right_pwm.value = 0.0
+        # ---- BTS7960 IO objects ----
+        freq = 500  # Hz (bump later if you switch to pigpio for 15–20 kHz)
+        self.left_rpwm = PWMOutputDevice(p('left_rpwm_pin').value, frequency=freq)
+        self.left_lpwm = PWMOutputDevice(p('left_lpwm_pin').value, frequency=freq)
+        self.right_rpwm = PWMOutputDevice(p('right_rpwm_pin').value, frequency=freq)
+        self.right_lpwm = PWMOutputDevice(p('right_lpwm_pin').value, frequency=freq)
 
-        # Encoders
+        # Optional EN pins (drive HIGH if provided)
+        self.left_r_en = DigitalOutputDevice(p('left_r_en_pin').value) if p('left_r_en_pin').value >= 0 else None
+        self.left_l_en = DigitalOutputDevice(p('left_l_en_pin').value) if p('left_l_en_pin').value >= 0 else None
+        self.right_r_en = DigitalOutputDevice(p('right_r_en_pin').value) if p('right_r_en_pin').value >= 0 else None
+        self.right_l_en = DigitalOutputDevice(p('right_l_en_pin').value) if p('right_l_en_pin').value >= 0 else None
+
+        for en in (self.left_r_en, self.left_l_en, self.right_r_en, self.right_l_en):
+            if en is not None:
+                en.on()  # enable bridge
+
+        # Zero PWMs
+        self.left_rpwm.value = 0.0
+        self.left_lpwm.value = 0.0
+        self.right_rpwm.value = 0.0
+        self.right_lpwm.value = 0.0
+
+        # Encoders & kinematics
         self.wheel_radius = float(p('wheel_radius_m').value)
         self.wheel_base = float(p('wheel_base_m').value)
         self.counts_per_rev = float(p('counts_per_rev').value)
@@ -62,19 +87,17 @@ class DriveController(Node):
         ra, rb = p('right_enc_a').value, p('right_enc_b').value
         bounce = float(p('enc_bounce_time').value)
 
-        self.left_enc = None
-        self.right_enc = None
-        if la >= 0 and lb >= 0:
-            self.left_enc = RotaryEncoder(la, lb, max_steps=0, wrap=False, bounce_time=bounce)
-        if ra >= 0 and rb >= 0:
-            self.right_enc = RotaryEncoder(ra, rb, max_steps=0, wrap=False, bounce_time=bounce)
+        self.left_invert = bool(p('left_enc_invert').value)
+        self.right_invert = bool(p('right_enc_invert').value)
+        self.log_steps = bool(p('log_steps').value)
 
+        self.left_enc = RotaryEncoder(la, lb, max_steps=0, wrap=False, bounce_time=bounce) if la >= 0 and lb >= 0 else None
+        self.right_enc = RotaryEncoder(ra, rb, max_steps=0, wrap=False, bounce_time=bounce) if ra >= 0 and rb >= 0 else None
+
+        # State
         self.last_left_steps = 0
         self.last_right_steps = 0
-
-        self.x = 0.0
-        self.y = 0.0
-        self.theta = 0.0
+        self.x = 0.0; self.y = 0.0; self.theta = 0.0
 
         self.last_time = self.get_clock().now()
         self.odom_pub = self.create_publisher(Odometry, '/odom', 10)
@@ -89,21 +112,38 @@ class DriveController(Node):
         self.timer = self.create_timer(1.0 / rate_hz, self.update)
 
         self.get_logger().info(
-            f"Encoders: left={'on' if self.left_enc else 'off'}, right={'on' if self.right_enc else 'off'}, "
-            f"m/tick={self.m_per_tick:.6e}, bounce_time={bounce}s"
+            f"BTS7960 pins L(RPWM,LPWM,EN)={(p('left_rpwm_pin').value, p('left_lpwm_pin').value, p('left_r_en_pin').value)} "
+            f"R(RPWM,LPWM,EN)={(p('right_rpwm_pin').value, p('right_lpwm_pin').value, p('right_r_en_pin').value)}; "
+            f"m_per_tick={self.m_per_tick:.6e}, bounce_time={bounce}s"
         )
 
+    # ----------------- Control -----------------
     def cmd_callback(self, msg: Twist):
         self.current_cmd = msg
-        linear = msg.linear.x
-        angular = msg.angular.z
-        left_speed = linear - (angular * self.wheel_base / 2.0)
-        right_speed = linear + (angular * self.wheel_base / 2.0)
 
-        vmax = 0.5
-        self.drive_motor('left', left_speed / vmax)
-        self.drive_motor('right', right_speed / vmax)
+        vmax = float(self.get_parameter('vmax').value)
+        gL   = float(self.get_parameter('linear_gain').value)
+        gA   = float(self.get_parameter('angular_gain').value)
 
+        linear  = gL * msg.linear.x      # m/s
+        angular = gA * msg.angular.z     # rad/s
+
+        half_track = self.wheel_base / 2.0
+        left_speed  = linear - (angular * half_track)
+        right_speed = linear + (angular * half_track)
+
+        # Clamp to [-vmax, +vmax]
+        left_speed  = max(min(left_speed,  vmax), -vmax)
+        right_speed = max(min(right_speed, vmax), -vmax)
+
+        # To PWM [-1..1]
+        pwm_left  = 0.0 if vmax <= 0 else left_speed  / vmax
+        pwm_right = 0.0 if vmax <= 0 else right_speed / vmax
+
+        self.drive_motor('left',  pwm_left)
+        self.drive_motor('right', pwm_right)
+
+    # ----------------- Odometry -----------------
     def update(self):
         now = self.get_clock().now()
         dt = (now - self.last_time).nanoseconds * 1e-9
@@ -114,33 +154,32 @@ class DriveController(Node):
         left_steps = self.left_enc.steps if self.left_enc else None
         right_steps = self.right_enc.steps if self.right_enc else None
 
-        d_left = 0.0
-        d_right = 0.0
+        d_left = 0.0; d_right = 0.0
         if left_steps is not None:
-            d_left = (left_steps - self.last_left_steps) * self.m_per_tick
+            dl = left_steps - self.last_left_steps
+            if self.left_invert: dl = -dl
+            d_left = dl * self.m_per_tick
             self.last_left_steps = left_steps
         if right_steps is not None:
-            d_right = (right_steps - self.last_right_steps) * self.m_per_tick
+            dr = right_steps - self.last_right_steps
+            if self.right_invert: dr = -dr
+            d_right = dr * self.m_per_tick
             self.last_right_steps = right_steps
 
-        eps = 1e-3
-        if self.left_enc and not self.right_enc:
-            if abs(self.current_cmd.angular.z) < eps:
-                d_right = d_left
-        elif self.right_enc and not self.left_enc:
-            if abs(self.current_cmd.angular.z) < eps:
-                d_left = d_right
-        elif (not self.left_enc) and (not self.right_enc):
-            v = self.current_cmd.linear.x
-            w = self.current_cmd.angular.z
-            d_left = (v - w * self.wheel_base / 2.0) * dt
-            d_right = (v + w * self.wheel_base / 2.0) * dt
+        if (self.left_enc is None) and (self.right_enc is None):
+            v = self.current_cmd.linear.x; w = self.current_cmd.angular.z
+            half_track = self.wheel_base / 2.0
+            d_left  = (v - w * half_track) * dt
+            d_right = (v + w * half_track) * dt
+        elif (self.left_enc is None) and (self.right_enc is not None):
+            d_left = d_right
+        elif (self.right_enc is None) and (self.left_enc is not None):
+            d_right = d_left
 
         d_center = 0.5 * (d_left + d_right)
-        d_theta = (d_right - d_left) / self.wheel_base
+        d_theta = (d_right - d_left) / self.wheel_base if self.wheel_base != 0 else 0.0
 
-        self.theta += d_theta
-        self.theta = math.atan2(math.sin(self.theta), math.cos(self.theta))
+        self.theta = math.atan2(math.sin(self.theta + d_theta), math.cos(self.theta + d_theta))
         self.x += d_center * math.cos(self.theta)
         self.y += d_center * math.sin(self.theta)
 
@@ -149,19 +188,31 @@ class DriveController(Node):
         self.publish_odom(now, v_meas, w_meas)
         self.broadcast_tf(now)
 
-    def drive_motor(self, side, pwm_val):
-        pwm_val = max(min(pwm_val, 1.0), -1.0)
-        direction = pwm_val >= 0
-        duty = abs(pwm_val)
-        if side == 'left':
-            self.left_in1.value = direction
-            self.left_in2.value = not direction
-            self.left_pwm.value = duty
-        elif side == 'right':
-            self.right_in3.value = direction
-            self.right_in4.value = not direction
-            self.right_pwm.value = duty
+        if self.log_steps:
+            self.get_logger().info(f"steps L={left_steps} R={right_steps}  dL={d_left:.4f} dR={d_right:.4f}  v={v_meas:.3f} w={w_meas:.3f}")
 
+    # ----------------- Hardware helpers (BTS7960) -----------------
+    def drive_motor(self, side, pwm_val):
+        """pwm_val in [-1, 1]; uses RPWM for +, LPWM for -; EN kept high."""
+        pwm_val = max(min(pwm_val, 1.0), -1.0)
+        duty = abs(pwm_val)
+
+        if side == 'left':
+            if pwm_val >= 0:
+                self.left_rpwm.value = duty
+                self.left_lpwm.value = 0.0
+            else:
+                self.left_rpwm.value = 0.0
+                self.left_lpwm.value = duty
+        elif side == 'right':
+            if pwm_val >= 0:
+                self.right_rpwm.value = duty
+                self.right_lpwm.value = 0.0
+            else:
+                self.right_rpwm.value = 0.0
+                self.right_lpwm.value = duty
+
+    # ----------------- Publishing -----------------
     def publish_odom(self, stamp, v, w):
         odom = Odometry()
         odom.header.stamp = stamp.to_msg()
@@ -196,8 +247,9 @@ class DriveController(Node):
 
     def destroy_node(self):
         self.get_logger().info("Stopping motors and cleaning up...")
-        self.left_pwm.value = 0.0
-        self.right_pwm.value = 0.0
+        # Coast both sides
+        self.left_rpwm.value = 0.0; self.left_lpwm.value = 0.0
+        self.right_rpwm.value = 0.0; self.right_lpwm.value = 0.0
         super().destroy_node()
 
 def main():
