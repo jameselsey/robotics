@@ -51,7 +51,8 @@ class DriveController(Node):
         self.declare_parameter('left_enc_invert', False)
         self.declare_parameter('right_enc_invert', False)
         self.declare_parameter('log_steps', False)
-
+        self.declare_parameter('max_angular_for_full_spin', 0.5)
+        
         p = self.get_parameter
 
         # ---- BTS7960 IO objects ----
@@ -123,20 +124,25 @@ class DriveController(Node):
 
         vmax = float(self.get_parameter('vmax').value)
         gL   = float(self.get_parameter('linear_gain').value)
-        gA   = float(self.get_parameter('angular_gain').value)
+        # Auto angular gain so full-stick spin hits full PWM
+        max_w_param = self.get_parameter('max_angular_for_full_spin')
+        if max_w_param.type_ is not None:
+            max_w = float(max_w_param.value)
+            half_track = self.wheel_base / 2.0
+            gA = (vmax / (half_track * max_w)) if max_w > 0 and half_track > 0 else 1.0
+        else:
+            gA = float(self.get_parameter('angular_gain').value)
 
-        linear  = gL * msg.linear.x      # m/s
-        angular = gA * msg.angular.z     # rad/s
+        linear  = gL * msg.linear.x
+        angular = gA * msg.angular.z
 
         half_track = self.wheel_base / 2.0
         left_speed  = linear - (angular * half_track)
         right_speed = linear + (angular * half_track)
 
-        # Clamp to [-vmax, +vmax]
         left_speed  = max(min(left_speed,  vmax), -vmax)
         right_speed = max(min(right_speed, vmax), -vmax)
 
-        # To PWM [-1..1]
         pwm_left  = 0.0 if vmax <= 0 else left_speed  / vmax
         pwm_right = 0.0 if vmax <= 0 else right_speed / vmax
 
