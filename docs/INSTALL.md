@@ -52,7 +52,8 @@ sudo apt install -y \
   ros-jazzy-xacro \
   ros-jazzy-foxglove-bridge \
   ros-jazzy-topic-tools \
-  ros-jazzy-image-transport-plugins
+  ros-jazzy-image-transport-plugins \
+  ros-jazzy-joint-state-publisher \ ros-jazzy-joint-state-publisher-gui \
   joystick \
   jstest-gtk \
   tree \
