@@ -13,23 +13,23 @@
       </material>
     </visual>
 
-    <!-- Middle square -->
+    <!-- Middle block (moved to -X so it looks like the rear) -->
     <visual>
       <geometry>
-        <box size="0.16 0.14 0.05"/> 
+        <box size="0.16 0.14 0.05"/>
       </geometry>
-      <origin xyz="0.07 0 0.10"/> <!-- sits on top of bottom rectangle -->
+      <origin xyz="-0.07 0 0.10"/> <!-- was +0.07; negative puts it behind the base center -->
       <material name="BlueTop">
         <color rgba="0.2 0.2 0.8 1"/>
       </material>
     </visual>
 
-    <!-- Top square -->
+    <!-- Top block (also moved to -X) -->
     <visual>
       <geometry>
-        <box size="0.16 0.14 0.05"/> 
+        <box size="0.16 0.14 0.05"/>
       </geometry>
-      <origin xyz="0.07 0 0.15"/> <!-- sits on top of bottom rectangle -->
+      <origin xyz="-0.07 0 0.15"/>
       <material name="silver">
         <color rgba="0.7 0.7 0.7 1.0"/>
       </material>
@@ -41,6 +41,8 @@
       </geometry>
       <origin xyz="0 0 0.05"/>
     </collision>
+
+    <!-- Simple inertial; tune as needed -->
     <inertial>
       <mass value="2.0"/>
       <origin xyz="0 0 0.05"/>
@@ -50,7 +52,7 @@
     </inertial>
   </link>
 
-  <!-- Left track -->
+  <!-- Left track (fixed visual) -->
   <link name="left_track">
     <visual>
       <geometry>
@@ -67,7 +69,7 @@
     <origin xyz="0 0.115 0"/>
   </joint>
 
-  <!-- Right track -->
+  <!-- Right track (fixed visual) -->
   <link name="right_track">
     <visual>
       <geometry>
@@ -84,11 +86,11 @@
     <origin xyz="0 -0.115 0"/>
   </joint>
 
-  <!-- Left drive wheel -->
+  <!-- Left drive wheel (continuous around +Y) -->
   <link name="left_wheel">
     <visual>
       <geometry><cylinder radius="0.03" length="0.02"/></geometry>
-      <origin rpy="1.5708 0 0"/>   <!-- makes the cylinder look like a wheel -->
+      <origin rpy="1.5708 0 0"/>   <!-- makes cylinder look like a wheel -->
       <material name="red_wheel"><color rgba="1.0 0.2 0.2 1.0"/></material>
     </visual>
   </link>
@@ -99,7 +101,7 @@
     <axis xyz="0 1 0"/>
   </joint>
 
-  <!-- Right drive wheel -->
+  <!-- Right drive wheel (continuous around +Y) -->
   <link name="right_wheel">
     <visual>
       <geometry><cylinder radius="0.03" length="0.02"/></geometry>
@@ -114,39 +116,32 @@
     <axis xyz="0 1 0"/>
   </joint>
 
-  <!-- Left idler wheel -->
+  <!-- Left idler (fixed) -->
   <link name="left_idler">
     <visual>
-      <geometry>
-        <cylinder radius="0.03" length="0.02"/>
-      </geometry>
-      <material name="green_idler">
-        <color rgba="0.2 1.0 0.2 1.0"/>
-      </material>
+      <geometry><cylinder radius="0.03" length="0.02"/></geometry>
+      <material name="green_idler"><color rgba="0.2 1.0 0.2 1.0"/></material>
+      <origin rpy="1.5708 0 0"/>
     </visual>
   </link>
   <joint name="left_idler_joint" type="fixed">
     <parent link="base_link"/>
     <child link="left_idler"/>
-    <origin xyz="0.11 0.13 0" rpy="1.5708 0 0"/>
+    <origin xyz="0.11 0.13 0"/>
   </joint>
 
-  <!-- Right idler wheel -->
+  <!-- Right idler (fixed) -->
   <link name="right_idler">
     <visual>
-      <geometry>
-        <cylinder radius="0.03" length="0.02"/>
-      </geometry>
-      <material name="green_idler">
-        <color rgba="0.2 1.0 0.2 1.0"/>
-      </material>
+      <geometry><cylinder radius="0.03" length="0.02"/></geometry>
+      <material name="green_idler"><color rgba="0.2 1.0 0.2 1.0"/></material>
+      <origin rpy="1.5708 0 0"/>
     </visual>
   </link>
   <joint name="right_idler_joint" type="fixed">
     <parent link="base_link"/>
     <child link="right_idler"/>
-    <origin xyz="0.11 -0.13 0" rpy="1.5708 0 0"/>
+    <origin xyz="0.11 -0.13 0"/>
   </joint>
 
 </robot>
-
