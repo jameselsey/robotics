@@ -1,0 +1,113 @@
+<?xml version="1.0"?>
+<robot name="xiaoR_geek_chassis" xmlns:xacro="http://ros.org/wiki/xacro">
+
+  <!-- Parameters: change these to match your robot -->
+  <xacro:property name="wheel_radius" value="0.03"/>        <!-- 3 cm -->
+  <xacro:property name="wheel_width" value="0.02"/>         <!-- optional thickness -->
+  <xacro:property name="wheel_separation" value="0.14"/>    <!-- distance between left & right wheels -->
+  <xacro:property name="chassis_length" value="0.20"/>       <!-- front-to-back -->
+  <xacro:property name="chassis_width" value="0.15"/>        <!-- side to side -->
+  <xacro:property name="chassis_height" value="0.05"/>       <!-- thickness / height off ground -->
+  <xacro:property name="mass_chassis" value="1.0"/>          <!-- kg -->
+  <xacro:property name="mass_wheel" value="0.1"/>            <!-- kg per wheel -->
+
+  <!-- Base/chassis link -->
+  <link name="base_link">
+    <visual>
+      <geometry>
+        <box size="${chassis_length} ${chassis_width} ${chassis_height}"/>
+      </geometry>
+      <origin xyz="0 0 ${chassis_height/2}" rpy="0 0 0"/>
+      <material name="Grey">
+        <color rgba="0.5 0.5 0.5 1.0"/>
+      </material>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="${chassis_length} ${chassis_width} ${chassis_height}"/>
+      </geometry>
+      <origin xyz="0 0 ${chassis_height/2}" rpy="0 0 0"/>
+    </collision>
+    <inertial>
+      <mass value="${mass_chassis}"/>
+      <!-- approximate inertia of a rectangle box about its center -->
+      <inertia
+        ixx="${(1.0/12.0) * mass_chassis * ( chassis_width*chassis_width + chassis_height*chassis_height )}"
+        iyy="${(1.0/12.0) * mass_chassis * ( chassis_length*chassis_length + chassis_height*chassis_height )}"
+        izz="${(1.0/12.0) * mass_chassis * ( chassis_length*chassis_length + chassis_width*chassis_width )}"
+        ixy="0" ixz="0" iyz="0"/>
+    </inertial>
+  </link>
+
+  <!-- Left wheel -->
+  <link name="wheel_left">
+    <visual>
+      <geometry>
+        <cylinder radius="${wheel_radius}" length="${wheel_width}"/>
+      </geometry>
+      <!-- align cylinder axis with the wheel axle (y-axis), shift so it touches the ground -->
+      <origin xyz="0 ${wheel_separation/2} ${wheel_radius}" rpy="0 0 ${pi/2}"/>
+      <material name="Black">
+        <color rgba="0 0 0 1.0"/>
+      </material>
+    </visual>
+    <collision>
+      <geometry>
+        <cylinder radius="${wheel_radius}" length="${wheel_width}"/>
+      </geometry>
+      <origin xyz="0 ${wheel_separation/2} ${wheel_radius}" rpy="0 0 ${pi/2}"/>
+    </collision>
+    <inertial>
+      <mass value="${mass_wheel}"/>
+      <inertia
+        ixx="${(1.0/12.0) * mass_wheel * ( 3*wheel_radius*wheel_radius + wheel_width*wheel_width )}"
+        iyy="${(1.0/12.0) * mass_wheel * ( 3*wheel_radius*wheel_radius + wheel_width*wheel_width )}"
+        izz="${(1.0/2.0) * mass_wheel * (wheel_radius*wheel_radius)}"
+        ixy="0" ixz="0" iyz="0"/>
+    </inertial>
+  </link>
+
+  <!-- Right wheel -->
+  <link name="wheel_right">
+    <visual>
+      <geometry>
+        <cylinder radius="${wheel_radius}" length="${wheel_width}"/>
+      </geometry>
+      <origin xyz="0 -${wheel_separation/2} ${wheel_radius}" rpy="0 0 ${pi/2}"/>
+      <material name="Black">
+        <color rgba="0 0 0 1.0"/>
+      </material>
+    </visual>
+    <collision>
+      <geometry>
+        <cylinder radius="${wheel_radius}" length="${wheel_width}"/>
+      </geometry>
+      <origin xyz="0 -${wheel_separation/2} ${wheel_radius}" rpy="0 0 ${pi/2}"/>
+    </collision>
+    <inertial>
+      <mass value="${mass_wheel}"/>
+      <inertia
+        ixx="${(1.0/12.0) * mass_wheel * ( 3*wheel_radius*wheel_radius + wheel_width*wheel_width )}"
+        iyy="${(1.0/12.0) * mass_wheel * ( 3*wheel_radius*wheel_radius + wheel_width*wheel_width )}"
+        izz="${(1.0/2.0) * mass_wheel * (wheel_radius*wheel_radius)}"
+        ixy="0" ixz="0" iyz="0"/>
+    </inertial>
+  </link>
+
+  <!-- Joints connecting wheels to base -->
+  <joint name="joint_wheel_left" type="continuous">
+    <parent link="base_link"/>
+    <child  link="wheel_left"/>
+    <origin xyz="0 ${wheel_separation/2} 0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+  </joint>
+
+  <joint name="joint_wheel_right" type="continuous">
+    <parent link="base_link"/>
+    <child  link="wheel_right"/>
+    <origin xyz="0 -${wheel_separation/2} 0" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+  </joint>
+
+</robot>
+

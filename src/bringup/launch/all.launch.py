@@ -40,6 +40,7 @@ def generate_launch_description():
                 r"^(.*/)?joint_states$",
                 r"^(.*/)?joy$",
                 r"^(.*/)?odom$",
+                r"^(.*/)?robot_description$",
                 r"^(.*/)?scan$",
                 r"^(.*/)?tf$",
                 r"^(.*/)?tf_static$",
@@ -70,6 +71,11 @@ def generate_launch_description():
             'robot_description': open(urdf_path).read()
         }]
     )
+    joint_state_pub = Node(
+        package='joint_state_publisher',
+        executable='joint_state_publisher',
+        name='joint_state_publisher'
+    )
 
     senses_share_dir = get_package_share_directory('senses')
     eyes_launch_path = os.path.join(senses_share_dir, 'launch', 'senses.launch.py')
@@ -79,6 +85,7 @@ def generate_launch_description():
         foxglove_bridge_node,
         drive_controller_node,
         robot_description_node,
+        joint_state_pub,
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(eyes_launch_path)
         ),
