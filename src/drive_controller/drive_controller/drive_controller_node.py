@@ -36,8 +36,8 @@ class DriveController(Node):
 
         # Kinematics
         self.declare_parameter('wheel_radius_m', 0.026)
-        self.declare_parameter('wheel_base_m', 0.185)
-        self.declare_parameter('counts_per_rev', 2048)
+        self.declare_parameter('wheel_base_m', 0.19)
+        self.declare_parameter('counts_per_rev', 230)
 
         # Odom / frames
         self.declare_parameter('odom_frame', 'odom')
