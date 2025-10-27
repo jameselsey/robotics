@@ -37,3 +37,12 @@ build-docker:
 
 connect:
 	docker compose exec hailo /bin/bash
+
+voice:
+	@msg="$(strip $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS)))"; \
+	[ -n "$$msg" ] || msg="This is a test message"; \
+	ros2 topic pub --once /speech_output std_msgs/msg/String "data: '$$msg'"
+
+# Swallow extra words after 'voice' so make doesn't treat them as targets
+$(filter-out voice,$(MAKECMDGOALS)):
+	@:
