@@ -1,4 +1,4 @@
-version: '3.8'
+#version: '3.8'
 
 services:
   ollama:
@@ -10,5 +10,41 @@ services:
       - ollama_data:/root/.ollama
     restart: unless-stopped
 
+  # hailo:
+  #   build: hailo
+  #   environment:
+  #     - UDEV=1
+  #   devices:
+  #     - /dev/dri:/dev/dri
+  #     - /dev/hailo0:/dev/hailo0
+  #   volumes:
+  #     - /dev:/dev
+  #     - /lib/firmware:/lib/firmware
+  #     - /run/udev:/run/udev:ro
+  #     - /sys:/sys
+  #   privileged: true
+  #   network_mode: host
+  #   ipc: host
+  #   tty: true
+  #   stdin_open: true
+  #   group_add:
+  #     - 44
+  #   security_opt:
+  #     - apparmor:unconfined
+
+  openwakeword:
+    image: rhasspy/wyoming-openwakeword:latest
+    container_name: openwakeword
+    restart: unless-stopped
+    ports:
+      - "10400:10400"
+    volumes:
+      - ./openwakeword/custom:/custom:ro
+    command: >
+      --uri tcp://0.0.0.0:10400
+      --custom-model-dir /custom
+      --preload-model computer
+      --debug
+      
 volumes:
   ollama_data:

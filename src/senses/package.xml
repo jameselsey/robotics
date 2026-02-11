@@ -21,6 +21,7 @@
   <exec_depend>python3-pyttsx3-pip</exec_depend>
   <exec_depend>python3-piper-tts-pip</exec_depend>
   <exec_depend>python3-sounddevice-pip</exec_depend>
+  <!-- <exec_depend>openwakeword-pip</exec_depend> -->
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>

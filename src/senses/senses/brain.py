@@ -27,7 +27,7 @@ class Brain(Node):
         # Get the Ollama API URL from env
         self.ollama_url = os.environ.get("OLLAMA_API_URL")
         if not self.ollama_url:
-            self.get_logger().error("OLLAMA_API_URL environment variable not set.")
+            self.get_logger().error("OLLAMA_API_URL environment variable not set. Falling back to default http://localhost:11434")
             self.ollama_url = "http://localhost:11434"  # fallback default
 
         # Choose which model to use (adjust as needed)
@@ -41,15 +41,26 @@ class Brain(Node):
 
         self.get_logger().info(f"📥 Prompt: {prompt}")
 
+        SYSTEM_PROMPT = (
+        "Robot voice assistant. Answer in ONE short sentence. "
+        "Max 12 words. No lists, no examples, no disclaimers."
+        )
+
         try:
             response = requests.post(
                 f"{self.ollama_url}/api/generate",
                 json={
                     "model": self.model,
+                    "system": SYSTEM_PROMPT,
                     "prompt": prompt,
-                    "stream": False
+                    "stream": False,
+                    "options": {
+                        "num_predict": 40,   # hard max tokens generated
+                        "temperature": 0.2,
+                        "top_p": 0.9,
+                    }
                 },
-                timeout=20
+                timeout=20                
             )
 
             if response.ok:

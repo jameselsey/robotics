@@ -6,6 +6,11 @@ clean:
 install-deps:
 	PIP_BREAK_SYSTEM_PACKAGES=1 rosdep install -yr --from-paths .
 
+install-oww:
+	sudo -H --preserve-env=PIP_BREAK_SYSTEM_PACKAGES python3 -m pip install -U --no-deps "openwakeword>=0.6.0"
+	sudo -H --preserve-env=PIP_BREAK_SYSTEM_PACKAGES python3 -m pip install -U onnxruntime numpy
+
+
 build: clean
 	# we have to compile the urdf file from the xacro, because urdf is what foxglove requires
 	ros2 run xacro xacro src/tank_description/urdf/robot.urdf.xacro > src/tank_description/urdf/robot.urdf
@@ -38,11 +43,11 @@ build-docker:
 connect:
 	docker compose exec hailo /bin/bash
 
-voice:
-	@msg="$(strip $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS)))"; \
-	[ -n "$$msg" ] || msg="This is a test message"; \
-	ros2 topic pub --once /speech_output std_msgs/msg/String "data: '$$msg'"
+# voice:
+# 	@msg="$(strip $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS)))"; \
+# 	[ -n "$$msg" ] || msg="This is a test message"; \
+# 	ros2 topic pub --once /speech_output std_msgs/msg/String "data: '$$msg'"
 
-# Swallow extra words after 'voice' so make doesn't treat them as targets
-$(filter-out voice,$(MAKECMDGOALS)):
-	@:
+# # Swallow extra words after 'voice' so make doesn't treat them as targets
+# $(filter-out voice,$(MAKECMDGOALS)):
+# 	@:

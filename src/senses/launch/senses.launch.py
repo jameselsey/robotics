@@ -24,11 +24,11 @@ def generate_launch_description():
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(eyes_launch_path)
         ),
-        # Node(
-        #     package='senses',
-        #     executable='ears',
-        #     name='ears'
-        # ),
+        Node(
+            package='senses',
+            executable='ears',
+            name='ears'
+        ),
         Node(
             package='senses',
             executable='mouth',
