@@ -16,7 +16,7 @@ import numpy as np
 import pyaudio
 import soundfile as sf
 import whisper
-from playsound import playsound
+import pygame
 
 
 # ----------------------------
@@ -129,6 +129,9 @@ class Ears(Node):
         self.pa = pyaudio.PyAudio()
         self.whisper_model = whisper.load_model("tiny")
 
+        # Initialize pygame mixer for sound playback
+        pygame.mixer.init()
+
         # Open a single mic stream (we will reuse this for both wake streaming + recording)
         self.mic_stream = self.pa.open(
             format=self.FORMAT,
@@ -221,9 +224,10 @@ class Ears(Node):
 
                 self.get_logger().info(f"✅ Wake word detected! (model={detected_name})")
                 try:
-                    playsound(self.sound_path, block=False)
-                except Exception:
-                    pass
+                    sound = pygame.mixer.Sound(self.sound_path)
+                    sound.play()
+                except Exception as e:
+                    self.get_logger().warn(f"Could not play sound: {e}")
 
                 # Flush a bit of buffered audio so we don't capture pre-wake audio
                 for _ in range(max(0, self.flush_after_wake_chunks)):
