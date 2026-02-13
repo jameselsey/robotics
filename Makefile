@@ -47,16 +47,16 @@ build: venv clean
 	@echo "✅ Build complete."
 
 launch-joystick:
-	@bash -c "RCUTILS_CONSOLE_OUTPUT_FORMAT='[{severity}] [{time:%Y-%m-%d %H:%M:%S.%f}] [{name}]: {message}' RCUTILS_COLORIZED_OUTPUT=1 $(VENV_ACTIVATE) && source install/setup.bash && source ~/vendor_ws/install/setup.bash && ros2 launch joystick joystick.launch.py"
+	@bash -c "$(VENV_ACTIVATE) && source install/setup.bash && source ~/vendor_ws/install/setup.bash && ros2 launch joystick joystick.launch.py"
 
 launch-drive:
-	@bash -c "RCUTILS_CONSOLE_OUTPUT_FORMAT='[{severity}] [{time:%Y-%m-%d %H:%M:%S.%f}] [{name}]: {message}' RCUTILS_COLORIZED_OUTPUT=1 $(VENV_ACTIVATE) && source install/setup.bash && source ~/vendor_ws/install/setup.bash && ros2 launch drive_controller drive_controller.launch.py"
+	@bash -c "$(VENV_ACTIVATE) && source install/setup.bash && source ~/vendor_ws/install/setup.bash && ros2 launch drive_controller drive_controller.launch.py"
 
 launch-senses:
-	@bash -c "RCUTILS_CONSOLE_OUTPUT_FORMAT='[{severity}] [{time:%Y-%m-%d %H:%M:%S.%f}] [{name}]: {message}' RCUTILS_COLORIZED_OUTPUT=1 $(VENV_ACTIVATE) && source install/setup.bash && source ~/vendor_ws/install/setup.bash && ros2 launch senses senses.launch.py"
+	@bash -c "$(VENV_ACTIVATE) && source install/setup.bash && source ~/vendor_ws/install/setup.bash && ros2 launch senses senses.launch.py"
 
 launch:
-	@bash -c "RCUTILS_CONSOLE_OUTPUT_FORMAT='[{severity}] [{time:%Y-%m-%d %H:%M:%S.%f}] [{name}]: {message}' RCUTILS_COLORIZED_OUTPUT=1 $(VENV_ACTIVATE) && source install/setup.bash && source ~/vendor_ws/install/setup.bash && ros2 launch bringup all.launch.py"
+	@bash -c "$(VENV_ACTIVATE) && source install/setup.bash && source ~/vendor_ws/install/setup.bash && ros2 launch bringup all.launch.py"
 
 docker:
 	# You may need to do these first, if it complains about permissions errors
