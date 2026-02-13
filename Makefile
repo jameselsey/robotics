@@ -43,7 +43,7 @@ build: venv clean
 	# we have to compile the urdf file from the xacro, because urdf is what foxglove requires
 	ros2 run xacro xacro src/tank_description/urdf/robot.urdf.xacro > src/tank_description/urdf/robot.urdf
 	@echo "🔨 Building with venv activated..."
-	@bash -c "$(VENV_ACTIVATE) && colcon build --symlink-install --cmake-args -DPYTHON_EXECUTABLE=$$(which python3)"
+	@bash -c "source $(VENV_DIR)/bin/activate && colcon build --symlink-install"
 	@echo "✅ Build complete."
 
 launch-joystick:
