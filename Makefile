@@ -14,6 +14,7 @@ venv:
 	@if [ ! -d "$(VENV_DIR)" ]; then \
 		echo "🔧 Creating virtual environment with system site packages..."; \
 		python3 -m venv --system-site-packages $(VENV_DIR); \
+		touch $(VENV_DIR)/COLCON_IGNORE; \
 		$(VENV_PIP) install -U pip wheel setuptools; \
 		echo "📦 Installing Python dependencies from requirements.txt..."; \
 		$(VENV_PIP) install -r requirements.txt; \
