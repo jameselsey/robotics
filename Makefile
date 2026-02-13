@@ -6,10 +6,6 @@ VENV_PYTHON = $(VENV_DIR)/bin/python3
 VENV_PIP = $(VENV_DIR)/bin/pip
 VENV_ACTIVATE = . $(VENV_DIR)/bin/activate
 
-# ROS2 log formatting - human-readable timestamps
-# Format: [INFO] [2025-02-13 14:30:31.123] [node_name]: message
-ROS_LOG_FORMAT=RCUTILS_CONSOLE_OUTPUT_FORMAT='[{severity}] [{time:%Y-%m-%d %H:%M:%S.%f}] [{name}]: {message}' RCUTILS_COLORIZED_OUTPUT=1
-
 venv:
 	@if [ ! -d "$(VENV_DIR)" ]; then \
 		echo "🔧 Creating virtual environment with system site packages..."; \
@@ -47,16 +43,16 @@ build: venv clean
 	@echo "✅ Build complete."
 
 launch-joystick:
-	@bash -c "$(ROS_LOG_FORMAT) $(VENV_ACTIVATE) && source install/setup.bash && source ~/vendor_ws/install/setup.bash && ros2 launch joystick joystick.launch.py"
+	@bash -c "RCUTILS_CONSOLE_OUTPUT_FORMAT='[{severity}] [{time:%Y-%m-%d %H:%M:%S.%f}] [{name}]: {message}' RCUTILS_COLORIZED_OUTPUT=1 $(VENV_ACTIVATE) && source install/setup.bash && source ~/vendor_ws/install/setup.bash && ros2 launch joystick joystick.launch.py"
 
 launch-drive:
-	@bash -c "$(ROS_LOG_FORMAT) $(VENV_ACTIVATE) && source install/setup.bash && source ~/vendor_ws/install/setup.bash && ros2 launch drive_controller drive_controller.launch.py"
+	@bash -c "RCUTILS_CONSOLE_OUTPUT_FORMAT='[{severity}] [{time:%Y-%m-%d %H:%M:%S.%f}] [{name}]: {message}' RCUTILS_COLORIZED_OUTPUT=1 $(VENV_ACTIVATE) && source install/setup.bash && source ~/vendor_ws/install/setup.bash && ros2 launch drive_controller drive_controller.launch.py"
 
 launch-senses:
-	@bash -c "$(ROS_LOG_FORMAT) $(VENV_ACTIVATE) && source install/setup.bash && source ~/vendor_ws/install/setup.bash && ros2 launch senses senses.launch.py"
+	@bash -c "RCUTILS_CONSOLE_OUTPUT_FORMAT='[{severity}] [{time:%Y-%m-%d %H:%M:%S.%f}] [{name}]: {message}' RCUTILS_COLORIZED_OUTPUT=1 $(VENV_ACTIVATE) && source install/setup.bash && source ~/vendor_ws/install/setup.bash && ros2 launch senses senses.launch.py"
 
 launch:
-	@bash -c "$(ROS_LOG_FORMAT) $(VENV_ACTIVATE) && source install/setup.bash && source ~/vendor_ws/install/setup.bash && ros2 launch bringup all.launch.py"
+	@bash -c "RCUTILS_CONSOLE_OUTPUT_FORMAT='[{severity}] [{time:%Y-%m-%d %H:%M:%S.%f}] [{name}]: {message}' RCUTILS_COLORIZED_OUTPUT=1 $(VENV_ACTIVATE) && source install/setup.bash && source ~/vendor_ws/install/setup.bash && ros2 launch bringup all.launch.py"
 
 docker:
 	# You may need to do these first, if it complains about permissions errors
