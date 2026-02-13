@@ -2,11 +2,13 @@
 
 This project uses a Python virtual environment to manage dependencies for the `senses` package, avoiding conflicts with system packages.
 
+**IMPORTANT**: This setup is designed for the Raspberry Pi/robot. The venv uses `--system-site-packages` to inherit ROS2 packages from the system while adding ML/AI libraries on top.
+
 ## Why Use a Venv?
 
 The `senses` package uses heavy ML/AI libraries (Whisper, Piper TTS) that have complex dependency trees. Installing these via `rosdep` can cause conflicts with system packages (like the `zipp` issue). Using a venv isolates these dependencies while still allowing ROS2 system integration.
 
-## Quick Start
+## Quick Start (On the Robot)
 
 The Makefile handles everything automatically:
 
@@ -24,7 +26,7 @@ make build
 make launch-senses
 ```
 
-## Manual Setup
+## Manual Setup (On the Robot)
 
 If you need to manually work with the venv:
 

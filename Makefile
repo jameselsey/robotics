@@ -8,8 +8,8 @@ VENV_ACTIVATE = . $(VENV_DIR)/bin/activate
 
 venv:
 	@if [ ! -d "$(VENV_DIR)" ]; then \
-		echo "🔧 Creating virtual environment..."; \
-		python3 -m venv $(VENV_DIR); \
+		echo "🔧 Creating virtual environment with system site packages..."; \
+		python3 -m venv --system-site-packages $(VENV_DIR); \
 		$(VENV_PIP) install -U pip wheel setuptools; \
 		echo "📦 Installing Python dependencies from requirements.txt..."; \
 		$(VENV_PIP) install -r requirements.txt; \
