@@ -7,7 +7,8 @@ VENV_PIP = $(VENV_DIR)/bin/pip
 VENV_ACTIVATE = . $(VENV_DIR)/bin/activate
 
 # ROS2 log formatting - human-readable timestamps
-ROS_LOG_FORMAT=RCUTILS_CONSOLE_OUTPUT_FORMAT='[{severity}] [{time}] [{name}]: {message}' RCUTILS_COLORIZED_OUTPUT=1
+# Format: [INFO] [2025-02-13 14:30:31.123] [node_name]: message
+ROS_LOG_FORMAT=RCUTILS_CONSOLE_OUTPUT_FORMAT='[{severity}] [{time:%Y-%m-%d %H:%M:%S.%f}] [{name}]: {message}' RCUTILS_COLORIZED_OUTPUT=1
 
 venv:
 	@if [ ! -d "$(VENV_DIR)" ]; then \
