@@ -7,7 +7,7 @@ VENV_PIP = $(VENV_DIR)/bin/pip
 VENV_ACTIVATE = . $(VENV_DIR)/bin/activate
 
 # ROS2 log formatting - human-readable timestamps
-export RCUTILS_CONSOLE_OUTPUT_FORMAT=[{severity}] [{time}] [{name}]: {message}
+export RCUTILS_CONSOLE_OUTPUT_FORMAT=[{severity}] [{time:%Y-%m-%d %H:%M:%S.%f}] [{name}]: {message}
 export RCUTILS_COLORIZED_OUTPUT=1
 
 venv:
@@ -43,7 +43,7 @@ build: venv clean
 	# we have to compile the urdf file from the xacro, because urdf is what foxglove requires
 	ros2 run xacro xacro src/tank_description/urdf/robot.urdf.xacro > src/tank_description/urdf/robot.urdf
 	@echo "🔨 Building with venv activated..."
-	@bash -c "$(VENV_ACTIVATE) && colcon build --symlink-install"
+	@bash -c "$(VENV_ACTIVATE) && colcon build --symlink-install --cmake-args -DPYTHON_EXECUTABLE=$$(which python3)"
 	@echo "✅ Build complete."
 
 launch-joystick:
