@@ -5,8 +5,8 @@
 pyaudio>=0.2.13
 soundfile>=0.12.1
 sounddevice>=0.4.6
-# playsound is broken on Python 3.12, using pygame as alternative
-pygame>=2.5.0
+# Using playsound 1.2.2 (1.3.0 is broken on Python 3.12+)
+playsound==1.2.2
 
 # Speech recognition & synthesis
 openai-whisper>=20231117
