@@ -26,3 +26,7 @@ requests>=2.31.0
 # Note: librosa is imported conditionally in ears.py for resampling
 # Only needed if audio sample rate != 16kHz
 librosa>=0.10.0
+
+# AI Agents
+strands-agents
+strands-agents-tools
