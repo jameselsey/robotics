@@ -43,8 +43,10 @@ build: venv clean
 	# we have to compile the urdf file from the xacro, because urdf is what foxglove requires
 	ros2 run xacro xacro src/tank_description/urdf/robot.urdf.xacro > src/tank_description/urdf/robot.urdf
 	@echo "🔨 Building with venv activated..."
-	@bash -c "source $(VENV_DIR)/bin/activate && colcon build --symlink-install"
+	@bash -c "source $(VENV_DIR)/bin/activate && echo 'Using Python:' && which python3 && colcon build --symlink-install"
 	@echo "✅ Build complete."
+	@echo "🔍 Verifying Python interpreter in executables..."
+	@head -1 install/senses/lib/senses/brain || echo "Brain executable not found"
 
 launch-joystick:
 	@bash -c "$(VENV_ACTIVATE) && source install/setup.bash && source ~/vendor_ws/install/setup.bash && ros2 launch joystick joystick.launch.py"
