@@ -6,6 +6,10 @@ VENV_PYTHON = $(VENV_DIR)/bin/python3
 VENV_PIP = $(VENV_DIR)/bin/pip
 VENV_ACTIVATE = . $(VENV_DIR)/bin/activate
 
+# ROS2 log formatting - human-readable timestamps
+export RCUTILS_CONSOLE_OUTPUT_FORMAT=[{severity}] [{time}] [{name}]: {message}
+export RCUTILS_COLORIZED_OUTPUT=1
+
 venv:
 	@if [ ! -d "$(VENV_DIR)" ]; then \
 		echo "🔧 Creating virtual environment with system site packages..."; \
