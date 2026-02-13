@@ -1,33 +1,58 @@
-.PHONY: clean build launch-joystick
+.PHONY: clean build launch-joystick venv
+
+# Virtual environment setup
+VENV_DIR = ros_venv
+VENV_PYTHON = $(VENV_DIR)/bin/python3
+VENV_PIP = $(VENV_DIR)/bin/pip
+VENV_ACTIVATE = . $(VENV_DIR)/bin/activate
+
+venv:
+	@if [ ! -d "$(VENV_DIR)" ]; then \
+		echo "🔧 Creating virtual environment..."; \
+		python3 -m venv $(VENV_DIR); \
+		$(VENV_PIP) install -U pip wheel setuptools; \
+		echo "📦 Installing Python dependencies from requirements.txt..."; \
+		$(VENV_PIP) install -r requirements.txt; \
+		echo "✅ Virtual environment ready."; \
+	else \
+		echo "✅ Virtual environment already exists."; \
+	fi
 
 clean:
 	rm -rf build/ install/ log/
 
-install-deps:
-	PIP_BREAK_SYSTEM_PACKAGES=1 rosdep install -yr --from-paths .
+clean-venv:
+	rm -rf $(VENV_DIR)
+	@echo "🗑️  Virtual environment removed."
+
+install-deps: venv
+	@echo "📦 Installing ROS2 system dependencies via rosdep..."
+	rosdep install -yr --from-paths . --skip-keys "python3-numpy python3-soundfile python3-pyaudio python3-openai-whisper-pip python3-playsound-pip python3-pyttsx3-pip python3-piper-tts-pip python3-sounddevice-pip python3-pvporcupine-pip"
 
 install-oww:
-	sudo -H --preserve-env=PIP_BREAK_SYSTEM_PACKAGES python3 -m pip install -U --no-deps "openwakeword>=0.6.0"
-	sudo -H --preserve-env=PIP_BREAK_SYSTEM_PACKAGES python3 -m pip install -U onnxruntime numpy
+	@echo "📦 Installing openWakeWord in venv..."
+	$(VENV_PIP) install -U --no-deps "openwakeword>=0.6.0"
+	$(VENV_PIP) install -U onnxruntime numpy
 
 
-build: clean
+build: venv clean
 	# we have to compile the urdf file from the xacro, because urdf is what foxglove requires
 	ros2 run xacro xacro src/tank_description/urdf/robot.urdf.xacro > src/tank_description/urdf/robot.urdf
-	colcon build --symlink-install
+	@echo "🔨 Building with venv activated..."
+	@bash -c "$(VENV_ACTIVATE) && colcon build --symlink-install"
 	@echo "✅ Build complete."
 
 launch-joystick:
-	@bash -c "source install/setup.bash && source ~/vendor_ws/install/setup.bash && ros2 launch joystick joystick.launch.py"
+	@bash -c "$(VENV_ACTIVATE) && source install/setup.bash && source ~/vendor_ws/install/setup.bash && ros2 launch joystick joystick.launch.py"
 
 launch-drive:
-	@bash -c "source install/setup.bash && source ~/vendor_ws/install/setup.bash && ros2 launch drive_controller drive_controller.launch.py"
+	@bash -c "$(VENV_ACTIVATE) && source install/setup.bash && source ~/vendor_ws/install/setup.bash && ros2 launch drive_controller drive_controller.launch.py"
 
 launch-senses:
-	@bash -c "source install/setup.bash && source ~/vendor_ws/install/setup.bash && ros2 launch senses senses.launch.py"
+	@bash -c "$(VENV_ACTIVATE) && source install/setup.bash && source ~/vendor_ws/install/setup.bash && ros2 launch senses senses.launch.py"
 
 launch:
-	@bash -c "source install/setup.bash && source ~/vendor_ws/install/setup.bash && ros2 launch bringup all.launch.py"
+	@bash -c "$(VENV_ACTIVATE) && source install/setup.bash && source ~/vendor_ws/install/setup.bash && ros2 launch bringup all.launch.py"
 
 docker:
 	# You may need to do these first, if it complains about permissions errors

@@ -11,17 +11,13 @@
 
   <exec_depend>ament_index_python</exec_depend>
 
-
-  <exec_depend>python3-numpy</exec_depend>
-  <exec_depend>python3-soundfile</exec_depend>
-  <exec_depend>python3-pyaudio</exec_depend>
-  <exec_depend>python3-pvporcupine-pip</exec_depend>
-  <exec_depend>python3-openai-whisper-pip</exec_depend>
-  <exec_depend>python3-playsound-pip</exec_depend>
-  <exec_depend>python3-pyttsx3-pip</exec_depend>
-  <exec_depend>python3-piper-tts-pip</exec_depend>
-  <exec_depend>python3-sounddevice-pip</exec_depend>
-  <!-- <exec_depend>openwakeword-pip</exec_depend> -->
+  <!-- Python dependencies now managed via venv (see requirements.txt) -->
+  <!-- System-level audio dependencies still needed -->
+  <exec_depend>portaudio19-dev</exec_depend>
+  <exec_depend>libsndfile1</exec_depend>
+  
+  <!-- GPIO for hardware control -->
+  <exec_depend>python3-gpiozero</exec_depend>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>
