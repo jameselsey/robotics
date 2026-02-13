@@ -21,13 +21,21 @@ def generate_launch_description():
     scan_mode = LaunchConfiguration('scan_mode', default='Standard')
 
     return LaunchDescription([
+        DeclareLaunchArgument(
+            'audio_device_name',
+            default_value='Brio',
+            description='Audio input device name to search for (case-insensitive substring match)'
+        ),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(eyes_launch_path)
         ),
         Node(
             package='senses',
             executable='ears',
-            name='ears'
+            name='ears',
+            parameters=[{
+                'input_device_name': LaunchConfiguration('audio_device_name', default='Brio')
+            }]
         ),
         Node(
             package='senses',

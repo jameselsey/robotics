@@ -94,7 +94,8 @@ class Ears(Node):
         self.declare_parameter("oww_port", 10400)
         self.declare_parameter("wake_model_name", "computer")  # must match server model name
         self.declare_parameter("chunk_size", 1280)             # samples per read/send
-        self.declare_parameter("input_device_index", 0)
+        self.declare_parameter("input_device_name", "Brio")    # search for device by name
+        self.declare_parameter("input_device_index", -1)       # fallback if name not found (-1 = use default)
 
         self.declare_parameter("silence_threshold", 300)        # mean abs int16
         self.declare_parameter("silence_duration", 0.8)         # seconds
@@ -107,6 +108,7 @@ class Ears(Node):
         self.wake_model_name = str(self.get_parameter("wake_model_name").value)
 
         self.chunk_size = int(self.get_parameter("chunk_size").value)
+        self.input_device_name = str(self.get_parameter("input_device_name").value)
         self.input_device_index = int(self.get_parameter("input_device_index").value)
 
         self.silence_threshold = int(self.get_parameter("silence_threshold").value)
@@ -129,6 +131,9 @@ class Ears(Node):
         self.pa = pyaudio.PyAudio()
         self.whisper_model = whisper.load_model("tiny")
 
+        # Find audio input device by name
+        device_index = self._find_audio_device(self.input_device_name, self.input_device_index)
+        
         # Open a single mic stream (we will reuse this for both wake streaming + recording)
         self.mic_stream = self.pa.open(
             format=self.FORMAT,
@@ -136,13 +141,42 @@ class Ears(Node):
             rate=self.RATE,
             input=True,
             frames_per_buffer=self.chunk_size,
-            input_device_index=self.input_device_index,
+            input_device_index=device_index,
         )
 
         # Background thread for wake loop
         self._stop = False
         self._thread = threading.Thread(target=self._wake_loop, daemon=True)
         self._thread.start()
+
+    def _find_audio_device(self, device_name: str, fallback_index: int) -> int | None:
+        """
+        Find audio input device by name (case-insensitive substring match).
+        Returns device index if found, fallback_index if not found, or None for default device.
+        """
+        self.get_logger().info(f"Searching for audio device containing '{device_name}'...")
+        
+        for i in range(self.pa.get_device_count()):
+            info = self.pa.get_device_info_by_index(i)
+            name = info.get('name', '')
+            max_input_channels = info.get('maxInputChannels', 0)
+            
+            # Check if this device has input capability and name matches
+            if max_input_channels > 0 and device_name.lower() in name.lower():
+                self.get_logger().info(f"✅ Found audio device: {name} (index={i})")
+                return i
+        
+        # Device not found by name
+        if fallback_index >= 0:
+            self.get_logger().warn(
+                f"⚠️  Device '{device_name}' not found, using fallback index {fallback_index}"
+            )
+            return fallback_index
+        else:
+            self.get_logger().warn(
+                f"⚠️  Device '{device_name}' not found, using system default device"
+            )
+            return None
 
     def destroy_node(self):
         self._stop = True
