@@ -1,5 +1,4 @@
 import os
-import sys
 import time
 import threading
 import logging
@@ -10,20 +9,14 @@ from std_msgs.msg import String
 
 from strands import Agent, tool
 from strands.models import BedrockModel
-from strands.tools.mcp import MCPClient
 from strands_tools import calculator, current_time
-from mcp import StdioServerParameters
-from mcp import stdio_client
+
+from senses.movement_tools import MovementController
 
 
-# ----------------------------
-# Custom tool example (optional)
-# ----------------------------
 @tool
 def letter_counter(word: str, letter: str) -> int:
-    """
-    Count occurrences of a specific letter in a word.
-    """
+    """Count occurrences of a specific letter in a word."""
     if not isinstance(word, str) or not isinstance(letter, str):
         return 0
     if len(letter) != 1:
@@ -36,134 +29,62 @@ class Brain(Node):
         super().__init__("brain")
         self.get_logger().info("🧠 Brain node has been started (Strands + Bedrock).")
 
-        # ----------------------------
-        # ROS interfaces
-        # ----------------------------
-        self.subscription = self.create_subscription(
-            String,
-            "speech_input",
-            self.handle_input,
-            10,
-        )
+        self.create_subscription(String, "speech_input", self.handle_input, 10)
+        self.publisher_ = self.create_publisher(String, "speech_output", 10)
 
-        self.publisher_ = self.create_publisher(
-            String,
-            "speech_output",
-            10,
-        )
+        self._movement = MovementController(self)
 
-        # ----------------------------
-        # Params / env
-        # ----------------------------
         self.declare_parameter("bedrock_region", "ap-southeast-2")
         self.declare_parameter("bedrock_model_id", "apac.anthropic.claude-3-haiku-20240307-v1:0")
         self.declare_parameter("temperature", 0.3)
-        _default_mcp_cmd = os.path.join(os.path.dirname(__file__), "movement_mcp_server.py")
-        self.declare_parameter("mcp_server_cmd", f"{sys.executable} {_default_mcp_cmd}")
 
-        # You can also override via env if you prefer
         region = os.environ.get("AWS_REGION") or str(self.get_parameter("bedrock_region").value)
         model_id = os.environ.get("BEDROCK_MODEL_ID") or str(self.get_parameter("bedrock_model_id").value)
         temperature = float(os.environ.get("BEDROCK_TEMPERATURE") or self.get_parameter("temperature").value)
-        mcp_server_cmd = str(self.get_parameter("mcp_server_cmd").value)
-        mcp_server_parts = mcp_server_cmd.split()
 
-        # Attempt to connect to the movement MCP server
-        mcp_extra = []
-        try:
-            _env = os.environ.copy()
-            self._mcp_client = MCPClient(lambda: stdio_client(
-                StdioServerParameters(
-                    command=mcp_server_parts[0],
-                    args=mcp_server_parts[1:],
-                    env=_env,
-                ),
-            ))
-            # Verify connection and log tool count
-            with self._mcp_client:
-                tool_count = len(self._mcp_client.list_tools_sync())
-            self.get_logger().info(f"✅ Loaded {tool_count} movement tools from MCP server")
-            mcp_extra = [self._mcp_client]
-        except Exception as e:
-            self.get_logger().warn(f"⚠️ MCP server unreachable, continuing without movement tools: {e}")
-            self._mcp_client = None
-            mcp_extra = []
-
-        self._mcp_extra = mcp_extra
-
-        # System prompt (keep short for voice)
         self.system_prompt = (
             "Robot voice assistant. For movement commands (move, drive, turn, stop, forward, backward, left, right), "
             "you MUST call the appropriate movement tool — do not just describe the action. "
-            "After calling a tool, report the result in ONE short sentence. "
             "For non-movement questions, answer in ONE short sentence. Max 12 words. No lists, no disclaimers."
         )
 
-        # ----------------------------
-        # Strands logging (optional)
-        # ----------------------------
-        # If you want Strands debug logs, set STRANDS_LOG_LEVEL=DEBUG
         strands_level = os.environ.get("STRANDS_LOG_LEVEL", "INFO").upper()
         try:
             logging.getLogger("strands").setLevel(getattr(logging, strands_level, logging.INFO))
         except Exception:
             pass
 
-        # ----------------------------
-        # Create Bedrock model + agent
-        # ----------------------------
-        # IMPORTANT: For some models/regions you must use an inference profile id/arn.
-        # Example: "apac.anthropic.claude-3-haiku-20240307-v1:0"
-        self.bedrock_model = BedrockModel(
-            model_id=model_id,
-            region_name=region,
-            temperature=temperature,
-        )
-
+        self.bedrock_model = BedrockModel(model_id=model_id, region_name=region, temperature=temperature)
+        self._tools = [calculator, current_time, letter_counter] + self._movement.make_tools()
         self.get_logger().info(f"Using Bedrock region={region}, model_id={model_id}, temperature={temperature}")
-
-        # Prevent overlapping requests (speech can arrive quickly)
         self._lock = threading.Lock()
 
     def handle_input(self, msg: String):
         prompt = (msg.data or "").strip()
         if not prompt:
-            self.get_logger().info("🤐 Received empty input. Ignoring.")
             return
-
-        # Run the call in a thread so we don't block the ROS executor
         threading.Thread(target=self._process_prompt, args=(prompt,), daemon=True).start()
 
     def _process_prompt(self, prompt: str):
         if not self._lock.acquire(blocking=False):
             self.get_logger().warn("Brain is busy; ignoring new prompt.")
             return
-
         try:
             self.get_logger().info(f"📥 Prompt: {prompt}")
-
-            # Wrap prompt with system instructions (simple + effective)
-            # This keeps your “voice assistant” constraints consistent.
             message = f"{self.system_prompt}\n\nUser: {prompt}"
 
-            # Fresh agent per call to avoid conversation history replay
-            agent = Agent(
-                model=self.bedrock_model,
-                tools=[calculator, current_time, letter_counter] + self._mcp_extra,
-            )
+            agent = Agent(model=self.bedrock_model, tools=self._tools)
 
             t0 = time.time()
             result = agent(message)
             t1 = time.time()
 
-            self.get_logger().debug(f"Raw result type: {type(result)}, value: {result}")
             reply = self._extract_text(result).strip()
-
             if not reply:
-                reply = "Sorry, I didn't catch that."
+                self.get_logger().info(f"📤 Response ({(t1 - t0):.2f}s): (action completed)")
+                return
 
             self.get_logger().info(f"📤 Response ({(t1 - t0):.2f}s): {reply}")
-
             out = String()
             out.data = reply
             self.publisher_.publish(out)
@@ -178,30 +99,28 @@ class Brain(Node):
 
     @staticmethod
     def _extract_text(result) -> str:
-        """
-        Make the Brain resilient to different Strands return shapes.
-        """
         if result is None:
             return ""
         if isinstance(result, str):
             return result
-
-        # dict-like
+        if hasattr(result, "message"):
+            msg = result.message
+            if hasattr(msg, "content") and isinstance(msg.content, list):
+                parts = [b.get("text", "") for b in msg.content if isinstance(b, dict) and b.get("text")]
+                text = " ".join(parts).strip()
+                if text:
+                    return text
         if isinstance(result, dict):
-            for k in ("response", "output", "text", "message", "content"):
+            for k in ("response", "output", "text", "content"):
                 v = result.get(k)
                 if isinstance(v, str) and v.strip():
                     return v
-            return str(result)
-
-        # object-like
-        for attr in ("response", "output", "text", "message", "content"):
+        for attr in ("response", "output", "text", "content"):
             if hasattr(result, attr):
                 v = getattr(result, attr)
                 if isinstance(v, str) and v.strip():
                     return v
-
-        return str(result)
+        return ""
 
 
 def main(args=None):
