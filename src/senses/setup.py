@@ -28,6 +28,7 @@ setup(
             'mouth = senses.mouth:main',
             'brain = senses.brain:main',
             'screen = senses.screen:main',
+            'movement_mcp_server = senses.movement_mcp_server:main',
         ],
     },
     package_data={

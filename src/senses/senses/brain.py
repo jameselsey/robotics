@@ -9,7 +9,9 @@ from std_msgs.msg import String
 
 from strands import Agent, tool
 from strands.models import BedrockModel
+from strands.mcp import MCPClient
 from strands_tools import calculator, current_time
+from mcp import StdioServerParameters
 
 
 # ----------------------------
@@ -54,11 +56,27 @@ class Brain(Node):
         self.declare_parameter("bedrock_region", "ap-southeast-2")
         self.declare_parameter("bedrock_model_id", "apac.anthropic.claude-3-haiku-20240307-v1:0")
         self.declare_parameter("temperature", 0.3)
+        self.declare_parameter("mcp_server_cmd", "movement_mcp_server")
 
         # You can also override via env if you prefer
         region = os.environ.get("AWS_REGION") or str(self.get_parameter("bedrock_region").value)
         model_id = os.environ.get("BEDROCK_MODEL_ID") or str(self.get_parameter("bedrock_model_id").value)
         temperature = float(os.environ.get("BEDROCK_TEMPERATURE") or self.get_parameter("temperature").value)
+        mcp_server_cmd = str(self.get_parameter("mcp_server_cmd").value)
+
+        # Attempt to connect to the movement MCP server
+        mcp_tools = []
+        try:
+            self._mcp_client = MCPClient(lambda: StdioServerParameters(
+                command=mcp_server_cmd,
+                args=[],
+            ))
+            self._mcp_client.__enter__()
+            mcp_tools = self._mcp_client.list_tools_sync()
+            self.get_logger().info(f"✅ Loaded {len(mcp_tools)} movement tools from MCP server")
+        except Exception as e:
+            self.get_logger().warn(f"⚠️ MCP server unreachable, continuing without movement tools: {e}")
+            self._mcp_client = None
 
         # System prompt (keep short for voice)
         self.system_prompt = (
@@ -89,7 +107,7 @@ class Brain(Node):
 
         self.agent = Agent(
             model=self.bedrock_model,
-            tools=[calculator, current_time, letter_counter],
+            tools=[calculator, current_time, letter_counter] + mcp_tools,
         )
 
         self.get_logger().info(f"Using Bedrock region={region}, model_id={model_id}, temperature={temperature}")
