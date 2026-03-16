@@ -69,7 +69,7 @@ class Brain(Node):
         mcp_server_parts = mcp_server_cmd.split()
 
         # Attempt to connect to the movement MCP server
-        mcp_tools = []
+        mcp_extra = []
         try:
             _env = os.environ.copy()
             self._mcp_client = MCPClient(lambda: stdio_client(
@@ -79,17 +79,24 @@ class Brain(Node):
                     env=_env,
                 ),
             ))
-            self._mcp_client.__enter__()
-            mcp_tools = self._mcp_client.list_tools_sync()
-            self.get_logger().info(f"✅ Loaded {len(mcp_tools)} movement tools from MCP server")
+            # Verify connection and log tool count
+            with self._mcp_client:
+                tool_count = len(self._mcp_client.list_tools_sync())
+            self.get_logger().info(f"✅ Loaded {tool_count} movement tools from MCP server")
+            mcp_extra = [self._mcp_client]
         except Exception as e:
             self.get_logger().warn(f"⚠️ MCP server unreachable, continuing without movement tools: {e}")
             self._mcp_client = None
+            mcp_extra = []
+
+        self._mcp_extra = mcp_extra
 
         # System prompt (keep short for voice)
         self.system_prompt = (
-            "Robot voice assistant. Answer in ONE short sentence. "
-            "Max 12 words. No lists, no examples, no disclaimers."
+            "Robot voice assistant. For movement commands (move, drive, turn, stop, forward, backward, left, right), "
+            "you MUST call the appropriate movement tool — do not just describe the action. "
+            "After calling a tool, report the result in ONE short sentence. "
+            "For non-movement questions, answer in ONE short sentence. Max 12 words. No lists, no disclaimers."
         )
 
         # ----------------------------
@@ -111,11 +118,6 @@ class Brain(Node):
             model_id=model_id,
             region_name=region,
             temperature=temperature,
-        )
-
-        self.agent = Agent(
-            model=self.bedrock_model,
-            tools=[calculator, current_time, letter_counter] + mcp_tools,
         )
 
         self.get_logger().info(f"Using Bedrock region={region}, model_id={model_id}, temperature={temperature}")
@@ -144,14 +146,17 @@ class Brain(Node):
             # This keeps your “voice assistant” constraints consistent.
             message = f"{self.system_prompt}\n\nUser: {prompt}"
 
+            # Fresh agent per call to avoid conversation history replay
+            agent = Agent(
+                model=self.bedrock_model,
+                tools=[calculator, current_time, letter_counter] + self._mcp_extra,
+            )
+
             t0 = time.time()
-            result = self.agent(message)
+            result = agent(message)
             t1 = time.time()
 
-            # Strands Agent return types can vary by version.
-            # Common cases:
-            # - str
-            # - object with .output / .text / dict-like content
+            self.get_logger().debug(f"Raw result type: {type(result)}, value: {result}")
             reply = self._extract_text(result).strip()
 
             if not reply:
