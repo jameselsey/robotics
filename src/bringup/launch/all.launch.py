@@ -42,6 +42,8 @@ def generate_launch_description():
                 r"^(.*/)?odom$",
                 r"^(.*/)?robot_description$",
                 r"^(.*/)?scan$",
+                r"^(.*/)?speech_input$",
+                r"^(.*/)?speech_output$",
                 r"^(.*/)?tf$",
                 r"^(.*/)?tf_static$",
             ],

@@ -1,4 +1,5 @@
 import os
+import sys
 import time
 import threading
 import logging
@@ -9,9 +10,10 @@ from std_msgs.msg import String
 
 from strands import Agent, tool
 from strands.models import BedrockModel
-from strands.mcp import MCPClient
+from strands.tools.mcp import MCPClient
 from strands_tools import calculator, current_time
 from mcp import StdioServerParameters
+from mcp import stdio_client
 
 
 # ----------------------------
@@ -56,20 +58,26 @@ class Brain(Node):
         self.declare_parameter("bedrock_region", "ap-southeast-2")
         self.declare_parameter("bedrock_model_id", "apac.anthropic.claude-3-haiku-20240307-v1:0")
         self.declare_parameter("temperature", 0.3)
-        self.declare_parameter("mcp_server_cmd", "movement_mcp_server")
+        _default_mcp_cmd = os.path.join(os.path.dirname(__file__), "movement_mcp_server.py")
+        self.declare_parameter("mcp_server_cmd", f"{sys.executable} {_default_mcp_cmd}")
 
         # You can also override via env if you prefer
         region = os.environ.get("AWS_REGION") or str(self.get_parameter("bedrock_region").value)
         model_id = os.environ.get("BEDROCK_MODEL_ID") or str(self.get_parameter("bedrock_model_id").value)
         temperature = float(os.environ.get("BEDROCK_TEMPERATURE") or self.get_parameter("temperature").value)
         mcp_server_cmd = str(self.get_parameter("mcp_server_cmd").value)
+        mcp_server_parts = mcp_server_cmd.split()
 
         # Attempt to connect to the movement MCP server
         mcp_tools = []
         try:
-            self._mcp_client = MCPClient(lambda: StdioServerParameters(
-                command=mcp_server_cmd,
-                args=[],
+            _env = os.environ.copy()
+            self._mcp_client = MCPClient(lambda: stdio_client(
+                StdioServerParameters(
+                    command=mcp_server_parts[0],
+                    args=mcp_server_parts[1:],
+                    env=_env,
+                ),
             ))
             self._mcp_client.__enter__()
             mcp_tools = self._mcp_client.list_tools_sync()
