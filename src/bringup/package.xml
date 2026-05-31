@@ -13,6 +13,12 @@
   <exec_depend>joystick</exec_depend>
   <exec_depend>foxglove_bridge</exec_depend>
   <exec_depend>image_transport</exec_depend>
+  <exec_depend>tf2_ros</exec_depend>
+  <exec_depend>navigation2</exec_depend>
+  <exec_depend>nav2_bringup</exec_depend>
+  <exec_depend>slam_toolbox</exec_depend>
+  <exec_depend>joint_state_publisher</exec_depend>
+  <exec_depend>robot_state_publisher</exec_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

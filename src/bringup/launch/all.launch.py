@@ -1,9 +1,10 @@
 from launch import LaunchDescription
-from launch.actions import IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node
+from launch.conditions import IfCondition
 from ament_index_python.packages import get_package_share_directory
-from launch.substitutions import Command
+from launch.substitutions import Command, LaunchConfiguration
 from launch_ros.substitutions import FindPackageShare
 from launch.substitutions import PathJoinSubstitution
 import os
@@ -38,6 +39,10 @@ def generate_launch_description():
                 r"^(.*/)?cmd_vel$",
                 r"^(.*/)?image_viz/compressed$",
                 r"^(.*/)?joint_states$",
+                r"^(.*/)?goal_pose$",
+                r"^(.*/)?slam_toolbox/.*$",
+                r"^(.*/)?map_metadata$",
+                r"^(.*/)?map$",
                 r"^(.*/)?joy$",
                 r"^(.*/)?odom$",
                 r"^(.*/)?robot_description$",
@@ -81,8 +86,16 @@ def generate_launch_description():
 
     senses_share_dir = get_package_share_directory('senses')
     eyes_launch_path = os.path.join(senses_share_dir, 'launch', 'senses.launch.py')
+    bringup_share_dir = get_package_share_directory('bringup')
+    slam_launch_path = os.path.join(bringup_share_dir, 'launch', 'slam.launch.py')
+    nav2_launch_path = os.path.join(bringup_share_dir, 'launch', 'nav2.launch.py')
 
     return LaunchDescription([
+        DeclareLaunchArgument(
+            'enable_navigation',
+            default_value='false',
+            description='Start Nav2 navigation servers as part of all.launch.py',
+        ),
         joystick_launch,
         foxglove_bridge_node,
         drive_controller_node,
@@ -90,5 +103,12 @@ def generate_launch_description():
         joint_state_pub,
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(eyes_launch_path)
+        ),
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(slam_launch_path)
+        ),
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(nav2_launch_path),
+            condition=IfCondition(LaunchConfiguration('enable_navigation')),
         ),
     ])

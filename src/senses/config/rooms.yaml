@@ -1,0 +1,15 @@
+frame_id: map
+base_frame: base_link
+rooms:
+  # Fill these in after you have driven the robot around and can see /map in Foxglove.
+  # Polygon coordinates are map-frame metres. navigate_pose is the Nav2 goal pose for the room.
+  # bedroom:
+  #   polygon:
+  #     - [0.0, 0.0]
+  #     - [2.0, 0.0]
+  #     - [2.0, 2.0]
+  #     - [0.0, 2.0]
+  #   navigate_pose:
+  #     x: 1.0
+  #     y: 1.0
+  #     yaw: 0.0

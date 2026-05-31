@@ -34,6 +34,7 @@ from strands.experimental.bidi.types.io import BidiInput, BidiOutput
 from strands_tools import calculator, current_time
 
 from senses.movement_tools import MovementController
+from senses.semantic_map_tools import SemanticMapController
 
 try:
     from gpiozero import PWMLED
@@ -639,6 +640,7 @@ class VoiceAgent(Node):
         self.declare_parameter("output_frames_per_buffer", 160)
         self.declare_parameter("output_prebuffer_chunks", 0)
         self.declare_parameter("mute_input_during_output_seconds", 0.75)
+        self.declare_parameter("rooms_config_path", "")
 
         self.declare_parameter("led_pin", 19)
         self.declare_parameter("led_pwm_hz", 400)
@@ -680,6 +682,7 @@ class VoiceAgent(Node):
             self.audio_processing_stream_delay_ms = int(self.output_frames_per_buffer / 16000 * 1000)
         self.output_prebuffer_chunks = int(self.get_parameter("output_prebuffer_chunks").value)
         self.mute_input_during_output_seconds = float(self.get_parameter("mute_input_during_output_seconds").value)
+        self.rooms_config_path = str(self.get_parameter("rooms_config_path").value).strip()
 
         self.RATE = 16000
         self.CHANNELS = 1
@@ -689,6 +692,9 @@ class VoiceAgent(Node):
         package_dir = Path(get_package_share_directory("senses"))
         self.sound_path = str(package_dir / "resource" / "r2-sound-acknowledged.mp3")
         self.stop_sound_path = str(package_dir / "resource" / "stop-listening.mp3")
+        if not self.rooms_config_path:
+            self.rooms_config_path = str(package_dir / "config" / "rooms.yaml")
+        self._semantic_map = SemanticMapController(self, self.rooms_config_path)
 
         try:
             logging.getLogger("strands").setLevel(getattr(logging, self.strands_log_level, logging.DEBUG))
@@ -1059,10 +1065,17 @@ class VoiceAgent(Node):
             "or sacrifice safety, accuracy, or clarity for a joke. "
             "Answer ordinary conversation and general knowledge questions directly, usually with one crisp quip at most. "
             "For movement requests, call the appropriate robot movement tool. "
-            "Only call tools when the user clearly asks for movement, time, calculation, or sleep. "
+            "For room or navigation questions, use the semantic map tools before answering. "
+            "Use what_room_am_i_in for questions like what room are you in, and navigate_to_room for requests like go to the bedroom. "
+            "Only call tools when the user clearly asks for movement, room location, navigation, time, calculation, or sleep. "
             "If the user says 'go to sleep', 'stop listening', or 'that's all', call go_to_sleep."
         )
-        tools = [calculator, current_time] + self._movement.make_tools() + [self._make_sleep_tool(stop_event)]
+        tools = (
+            [calculator, current_time]
+            + self._movement.make_tools()
+            + self._semantic_map.make_tools()
+            + [self._make_sleep_tool(stop_event)]
+        )
         agent = BidiAgent(model=model, tools=tools, system_prompt=system_prompt)
 
         audio_input = DirectAudioInput(

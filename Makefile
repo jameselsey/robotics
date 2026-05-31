@@ -1,10 +1,11 @@
-.PHONY: clean build launch-joystick venv
+.PHONY: clean build launch-joystick venv rviz build-rviz
 
 # Virtual environment setup
 VENV_DIR = ros_venv
 VENV_PYTHON = $(VENV_DIR)/bin/python3
 VENV_PIP = $(VENV_DIR)/bin/pip
 VENV_ACTIVATE = . $(VENV_DIR)/bin/activate
+ARGS ?=
 
 # ROS2 log formatting - human-readable timestamps
 export RCUTILS_CONSOLE_OUTPUT_FORMAT=[{severity}] [{time}] [{name}]: {message}
@@ -56,7 +57,7 @@ launch-senses:
 	@bash -c "source /opt/ros/jazzy/setup.bash && source install/setup.bash && source ~/vendor_ws/install/setup.bash && ros2 launch senses senses.launch.py"
 
 launch:
-	@bash -c "$(VENV_ACTIVATE) && source install/setup.bash && source ~/vendor_ws/install/setup.bash && ros2 launch bringup all.launch.py"
+	@bash -c "$(VENV_ACTIVATE) && source install/setup.bash && source ~/vendor_ws/install/setup.bash && ros2 launch bringup all.launch.py $(ARGS)"
 
 docker:
 	# You may need to do these first, if it complains about permissions errors
@@ -71,3 +72,11 @@ build-docker:
 
 connect:
 	docker compose exec hailo /bin/bash
+
+
+build-rviz:
+	docker compose build rviz
+
+rviz:
+	@echo "Starting RViz in Docker. On macOS, start XQuartz and run: xhost +localhost"
+	DISPLAY=$${DISPLAY:-host.docker.internal:0} docker compose --profile tools run --rm rviz

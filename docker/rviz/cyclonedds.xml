@@ -1,0 +1,13 @@
+<CycloneDDS>
+  <Domain>
+    <General>
+      <AllowMulticast>false</AllowMulticast>
+    </General>
+    <Discovery>
+      <ParticipantIndex>auto</ParticipantIndex>
+      <Peers>
+        <Peer Address="robopi"/>
+      </Peers>
+    </Discovery>
+  </Domain>
+</CycloneDDS>

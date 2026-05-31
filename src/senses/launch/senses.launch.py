@@ -29,7 +29,7 @@ def generate_launch_description():
         DeclareLaunchArgument('aws_profile', default_value='default'),
         DeclareLaunchArgument('aws_region', default_value='us-east-1'),
         DeclareLaunchArgument('nova_model_id', default_value='amazon.nova-2-sonic-v1:0'),
-        DeclareLaunchArgument('nova_voice', default_value='tiffany'),
+        DeclareLaunchArgument('nova_voice', default_value='amy'),
         DeclareLaunchArgument('endpointing_sensitivity', default_value='LOW'),
         DeclareLaunchArgument('idle_timeout_seconds', default_value='45.0'),
         DeclareLaunchArgument('max_session_seconds', default_value='420.0'),

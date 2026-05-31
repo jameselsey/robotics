@@ -46,5 +46,25 @@ services:
       --preload-model computer
       --debug
       
+  rviz:
+    build:
+      context: ./docker/rviz
+    image: robotics-rviz:jazzy
+    container_name: robotics-rviz
+    network_mode: host
+    environment:
+      - DISPLAY=${DISPLAY:-host.docker.internal:0}
+      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}
+      - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+      - CYCLONEDDS_URI=file:///etc/cyclonedds.xml
+      - QT_X11_NO_MITSHM=1
+      - LIBGL_ALWAYS_SOFTWARE=1
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - ./src:/workspace/src:ro
+    command: bash -lc "source /opt/ros/jazzy/setup.bash && rviz2"
+    profiles:
+      - tools
+
 volumes:
   ollama_data:
