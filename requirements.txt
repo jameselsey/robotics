@@ -1,5 +1,10 @@
 # ROS2 Senses Package Python Dependencies
 # Install in venv to avoid system package conflicts
+catkin_pkg
+empy
+lark-parser
+setuptools
+wheel
 
 # Audio processing
 pyaudio>=0.2.13
@@ -28,5 +33,11 @@ requests>=2.31.0
 librosa>=0.10.0
 
 # AI Agents
-strands-agents
+strands-agents[bidi,bidi-io]>=1.41.0
 strands-agents-tools
+
+boto3
+aws-sdk-bedrock-runtime>=0.6.0
+
+# Acoustic echo cancellation / noise suppression for robot voice loop
+pywebrtc-audio>=0.1.0

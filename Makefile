@@ -7,7 +7,7 @@ VENV_PIP = $(VENV_DIR)/bin/pip
 VENV_ACTIVATE = . $(VENV_DIR)/bin/activate
 
 # ROS2 log formatting - human-readable timestamps
-export RCUTILS_CONSOLE_OUTPUT_FORMAT=[{severity}] [{time:%Y-%m-%d %H:%M:%S.%f}] [{name}]: {message}
+export RCUTILS_CONSOLE_OUTPUT_FORMAT=[{severity}] [{time}] [{name}]: {message}
 export RCUTILS_COLORIZED_OUTPUT=1
 
 venv:
@@ -32,18 +32,18 @@ clean-venv:
 
 install-deps: venv
 	@echo "📦 Installing ROS2 system dependencies via rosdep..."
-	rosdep install -yr --from-paths . --skip-keys "python3-numpy python3-soundfile python3-pyaudio python3-openai-whisper-pip python3-playsound-pip python3-pyttsx3-pip python3-piper-tts-pip python3-sounddevice-pip python3-pvporcupine-pip"
+	PIP_BREAK_SYSTEM_PACKAGES=1 rosdep install -yr --from-paths . --as-root pip:false
 
 install-oww:
 	@echo "📦 Installing openWakeWord in venv..."
 	$(VENV_PIP) install -U --no-deps "openwakeword>=0.6.0"
 	$(VENV_PIP) install -U onnxruntime numpy
 
-build: venv clean
+build: 
 	# we have to compile the urdf file from the xacro, because urdf is what foxglove requires
 	ros2 run xacro xacro src/tank_description/urdf/robot.urdf.xacro > src/tank_description/urdf/robot.urdf
 	@echo "🔨 Building with venv activated..."
-	@bash -c "source $(VENV_DIR)/bin/activate && colcon build --symlink-install"
+	@bash -c "colcon build --symlink-install"
 	@echo "✅ Build complete."
 
 launch-joystick:
@@ -53,7 +53,7 @@ launch-drive:
 	@bash -c "$(VENV_ACTIVATE) && source install/setup.bash && source ~/vendor_ws/install/setup.bash && ros2 launch drive_controller drive_controller.launch.py"
 
 launch-senses:
-	@bash -c "source $(VENV_DIR)/bin/activate && source /opt/ros/jazzy/setup.bash && source install/setup.bash && source ~/vendor_ws/install/setup.bash && ros2 launch senses senses.launch.py"
+	@bash -c "source /opt/ros/jazzy/setup.bash && source install/setup.bash && source ~/vendor_ws/install/setup.bash && ros2 launch senses senses.launch.py"
 
 launch:
 	@bash -c "$(VENV_ACTIVATE) && source install/setup.bash && source ~/vendor_ws/install/setup.bash && ros2 launch bringup all.launch.py"

@@ -28,6 +28,7 @@ setup(
             'mouth = senses.mouth:main',
             'brain = senses.brain:main',
             'screen = senses.screen:main',
+            'voice_agent = senses.voice_agent:main',
         ],
     },
     package_data={
