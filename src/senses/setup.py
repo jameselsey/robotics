@@ -30,6 +30,7 @@ setup(
             'brain = senses.brain:main',
             'screen = senses.screen:main',
             'voice_agent = senses.voice_agent:main',
+            'room_markers = senses.room_markers:main',
         ],
     },
     package_data={

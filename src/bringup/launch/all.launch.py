@@ -51,6 +51,7 @@ def generate_launch_description():
                 r"^(.*/)?speech_output$",
                 r"^(.*/)?tf$",
                 r"^(.*/)?tf_static$",
+                r"^(.*/)?visualization_marker_array$",
             ],
         }]
     )

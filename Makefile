@@ -1,4 +1,4 @@
-.PHONY: clean build launch-joystick venv rviz build-rviz
+.PHONY: clean build launch-joystick venv rviz build-rviz save-map publish-room-markers
 
 # Virtual environment setup
 VENV_DIR = ros_venv
@@ -6,6 +6,12 @@ VENV_PYTHON = $(VENV_DIR)/bin/python3
 VENV_PIP = $(VENV_DIR)/bin/pip
 VENV_ACTIVATE = . $(VENV_DIR)/bin/activate
 ARGS ?=
+MAP_NAME ?= house
+MAP_DIR ?= maps
+MAP_TOPIC ?= /map
+MAP_WAIT_TIMEOUT ?= 15
+MAP_SAVE_TIMEOUT ?= 10.0
+ROOMS_CONFIG ?= src/senses/config/rooms.yaml
 
 # ROS2 log formatting - human-readable timestamps
 export RCUTILS_CONSOLE_OUTPUT_FORMAT=[{severity}] [{time}] [{name}]: {message}
@@ -58,6 +64,14 @@ launch-senses:
 
 launch:
 	@bash -c "$(VENV_ACTIVATE) && source install/setup.bash && source ~/vendor_ws/install/setup.bash && ros2 launch bringup all.launch.py $(ARGS)"
+
+save-map:
+	@mkdir -p $(MAP_DIR)
+	@echo "Saving SLAM map to $(MAP_DIR)/$(MAP_NAME).yaml and $(MAP_DIR)/$(MAP_NAME).pgm"
+	@bash -c "source /opt/ros/jazzy/setup.bash && source install/setup.bash && ros2 lifecycle set /slam_toolbox configure >/dev/null 2>&1 || true && ros2 lifecycle set /slam_toolbox activate >/dev/null 2>&1 || true && timeout $(MAP_WAIT_TIMEOUT) bash -c 'until ros2 topic echo $(MAP_TOPIC) --once >/dev/null 2>&1; do sleep 1; done' && ros2 run nav2_map_server map_saver_cli -t $(MAP_TOPIC) -f $(MAP_DIR)/$(MAP_NAME) --ros-args -p save_map_timeout:=$(MAP_SAVE_TIMEOUT)"
+
+publish-room-markers:
+	@bash -c "source /opt/ros/jazzy/setup.bash && source install/setup.bash && ros2 run senses room_markers --ros-args -p rooms_config_path:=$(ROOMS_CONFIG)"
 
 docker:
 	# You may need to do these first, if it complains about permissions errors

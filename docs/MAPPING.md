@@ -38,62 +38,36 @@ Drive the robot slowly around the house so SLAM Toolbox can build up the occupan
 
 ## 2. Save the Occupancy Map
 
-When the map looks good, save it from the Pi:
+When the map looks good in Foxglove, save it from the Pi:
 
 ```bash
-mkdir -p ~/robotics/maps
-ros2 run nav2_map_server map_saver_cli -f ~/robotics/maps/home
+make save-map
 ```
 
 That creates:
 
 ```text
-~/robotics/maps/home.yaml
-~/robotics/maps/home.pgm
+~/robotics/maps/house.yaml
+~/robotics/maps/house.pgm
 ```
 
-These files are the occupancy map. They are not the room labels yet.
-
-## 3. Open RViz on the Mac
-
-RViz is easiest for choosing exact map coordinates because it can publish clicked points.
-
-On macOS, install and start XQuartz, enable **Allow connections from network clients** in XQuartz settings, restart XQuartz, then allow local X11 clients:
+These files are the occupancy map. They are not the room labels yet. Override the
+name if you want another output file:
 
 ```bash
-xhost +localhost
+make save-map MAP_NAME=downstairs
 ```
 
-Docker Desktop may also need host networking enabled for ROS 2 DDS traffic. If `make rviz` complains about host networking, enable it in Docker Desktop settings, or temporarily remove `network_mode: host` from the `rviz` service and try again on the same Wi-Fi network.
+## 3. Annotate Rooms Manually
 
-From your Mac checkout of this repo:
+Copy the saved map files to your Mac, annotate them however you prefer, then copy
+the resulting room labels back into:
 
-```bash
-make build-rviz
-make rviz
+```text
+~/robotics/src/senses/config/rooms.yaml
 ```
 
-In RViz:
-
-1. Set `Fixed Frame` to `map`.
-2. Add a `Map` display and set topic to `/map`.
-3. Add `LaserScan` for `/scan` if you want to see live lidar.
-4. Add `TF` if you want to inspect frames.
-5. Use the toolbar's `Publish Point` tool to click room corners.
-
-If RViz opens but shows no ROS topics, check that the Mac can resolve `robopi` and that the robot and Mac are on the same network. The Docker RViz container uses Cyclone DDS with `robopi` as its explicit peer.
-
-## 4. Capture Room Polygon Points
-
-On the Pi, echo clicked points from RViz:
-
-```bash
-ros2 topic echo /clicked_point
-```
-
-Then in RViz, click the corners of a room in order around the perimeter. Each click prints a `point.x` and `point.y` in the `map` frame. Copy those coordinates into `senses/config/rooms.yaml`.
-
-Example:
+The room label format is:
 
 ```yaml
 frame_id: map
@@ -109,21 +83,12 @@ rooms:
       x: 2.50
       y: 0.85
       yaw: 0.0
-  kitchen:
-    polygon:
-      - [-2.10, 0.20]
-      - [0.80, 0.20]
-      - [0.80, 2.50]
-      - [-2.10, 2.50]
-    navigate_pose:
-      x: -0.60
-      y: 1.30
-      yaw: 1.57
 ```
 
-The `polygon` is used for questions like "what room are you in?". The optional `navigate_pose` is used for commands like "navigate to the bedroom".
+The `polygon` is used for questions like "what room are you in?". The optional
+`navigate_pose` is used for commands like "navigate to the bedroom".
 
-After editing room labels, rebuild or use the installed config path directly, then ask the agent to reload labels:
+After copying the edited labels back to the Pi, rebuild the `senses` package:
 
 ```bash
 colcon build --packages-select senses --symlink-install
@@ -131,6 +96,29 @@ source install/setup.bash
 ```
 
 Then say: "reload room labels".
+
+## 4. Publish Room Markers
+
+Publish the annotated room polygons and labels for Foxglove:
+
+```bash
+make publish-room-markers
+```
+
+This publishes `visualization_msgs/msg/MarkerArray` messages on:
+
+```text
+/visualization_marker_array
+```
+
+In Foxglove, add a `3D` panel and enable the marker array topic. The publisher
+uses the `map` frame by default, so SLAM must be running and publishing `map`.
+
+Use a different labels file if needed:
+
+```bash
+make publish-room-markers ROOMS_CONFIG=/home/jelsey/robotics/src/senses/config/rooms.yaml
+```
 
 ## 5. Start Nav2 Navigation
 
