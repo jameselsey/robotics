@@ -137,11 +137,18 @@ source ~/vendor_ws/install/setup.bash
 ros2 launch bringup all.launch.py enable_navigation:=true
 ```
 
-Once Nav2 is running and a room has a `navigate_pose`, the voice agent can call `navigate_to_room` for requests like:
+Once Nav2 is running, the voice agent can use the room annotations for questions
+and navigation. Try:
 
 ```text
+What rooms are available?
+What room are you in?
+Tell me about room 1.
 Can you navigate to the bedroom?
 ```
+
+For navigation, a room-specific `navigate_pose` is preferred. If a room only has
+a polygon, the voice agent falls back to the polygon centre as the Nav2 goal.
 
 ## Troubleshooting
 
