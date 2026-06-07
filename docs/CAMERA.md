@@ -65,3 +65,28 @@ Then, in the foxglove bridge, we can use the whitelist to include the `/image_vi
         }]
     )
 ```
+
+## Voice Agent Vision
+
+The voice agent can answer visual questions by taking the latest still frame from
+the throttled camera topic and sending it to Amazon Bedrock Nova Lite.
+
+Default settings:
+
+```text
+vision_topic=/image_viz/compressed
+vision_model_id=amazon.nova-lite-v1:0
+```
+
+Example questions:
+
+```text
+What can you see?
+What am I holding?
+What is in my left hand?
+Describe the scene in front of you.
+```
+
+The tool uses the latest `sensor_msgs/msg/CompressedImage` frame and calls
+Bedrock Runtime with the configured AWS profile and region used by the voice
+agent. It is intended for still-frame visual Q&A, not continuous video analysis.

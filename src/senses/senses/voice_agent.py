@@ -35,6 +35,7 @@ from strands_tools import calculator, current_time
 
 from senses.movement_tools import MovementController
 from senses.semantic_map_tools import SemanticMapController
+from senses.vision_tools import VisionController
 
 try:
     from gpiozero import PWMLED
@@ -599,6 +600,14 @@ def _optional_device_index(value: int) -> int | None:
     return value if value >= 0 else None
 
 
+def _param_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return bool(value)
+
+
 class VoiceAgent(Node):
     def __init__(self):
         super().__init__("voice_agent")
@@ -641,6 +650,10 @@ class VoiceAgent(Node):
         self.declare_parameter("output_prebuffer_chunks", 0)
         self.declare_parameter("mute_input_during_output_seconds", 0.75)
         self.declare_parameter("rooms_config_path", "")
+        self.declare_parameter("vision_enabled", True)
+        self.declare_parameter("vision_topic", os.environ.get("VISION_TOPIC", "/image_viz/compressed"))
+        self.declare_parameter("vision_model_id", os.environ.get("VISION_MODEL_ID", "amazon.nova-lite-v1:0"))
+        self.declare_parameter("vision_frame_timeout_seconds", 3.0)
 
         self.declare_parameter("led_pin", 19)
         self.declare_parameter("led_pwm_hz", 400)
@@ -668,10 +681,10 @@ class VoiceAgent(Node):
         self.idle_timeout_seconds = float(self.get_parameter("idle_timeout_seconds").value)
         self.max_session_seconds = float(self.get_parameter("max_session_seconds").value)
         self.audio_activity_threshold = float(self.get_parameter("audio_activity_threshold").value)
-        self.audio_silence_gate_enabled = bool(self.get_parameter("audio_silence_gate_enabled").value)
+        self.audio_silence_gate_enabled = _param_bool(self.get_parameter("audio_silence_gate_enabled").value)
         self.audio_silence_gate_threshold = float(self.get_parameter("audio_silence_gate_threshold").value)
         self.audio_speech_gate_threshold = float(self.get_parameter("audio_speech_gate_threshold").value)
-        self.audio_processing_enabled = bool(self.get_parameter("audio_processing_enabled").value)
+        self.audio_processing_enabled = _param_bool(self.get_parameter("audio_processing_enabled").value)
         self.debug_text_probe = str(self.get_parameter("debug_text_probe").value).strip()
         self.session_heartbeat_seconds = float(self.get_parameter("session_heartbeat_seconds").value)
         self.strands_log_level = str(self.get_parameter("strands_log_level").value).upper()
@@ -683,6 +696,10 @@ class VoiceAgent(Node):
         self.output_prebuffer_chunks = int(self.get_parameter("output_prebuffer_chunks").value)
         self.mute_input_during_output_seconds = float(self.get_parameter("mute_input_during_output_seconds").value)
         self.rooms_config_path = str(self.get_parameter("rooms_config_path").value).strip()
+        self.vision_enabled = _param_bool(self.get_parameter("vision_enabled").value)
+        self.vision_topic = str(self.get_parameter("vision_topic").value).strip()
+        self.vision_model_id = str(self.get_parameter("vision_model_id").value).strip()
+        self.vision_frame_timeout_seconds = float(self.get_parameter("vision_frame_timeout_seconds").value)
 
         self.RATE = 16000
         self.CHANNELS = 1
@@ -695,6 +712,15 @@ class VoiceAgent(Node):
         if not self.rooms_config_path:
             self.rooms_config_path = str(package_dir / "config" / "rooms.yaml")
         self._semantic_map = SemanticMapController(self, self.rooms_config_path)
+        self._vision = VisionController(
+            self,
+            topic=self.vision_topic,
+            model_id=self.vision_model_id,
+            aws_profile=self.aws_profile,
+            aws_region=self.aws_region,
+            enabled=self.vision_enabled,
+            frame_timeout_seconds=self.vision_frame_timeout_seconds,
+        )
 
         try:
             logging.getLogger("strands").setLevel(getattr(logging, self.strands_log_level, logging.DEBUG))
@@ -1069,13 +1095,16 @@ class VoiceAgent(Node):
             "Use list_known_rooms or describe_room_annotations when asked what rooms are available or what is annotated. "
             "Use what_room_am_i_in or where_am_i_on_the_map for questions like what room are you in or where are you. "
             "Use navigate_to_room for requests like go to the bedroom; it can use a room's navigate_pose or the polygon centre. "
-            "Only call tools when the user clearly asks for movement, room location, navigation, time, calculation, or sleep. "
+            "For visual questions, use inspect_camera_view before answering. "
+            "Visual questions include what can you see, what am I holding, describe the scene, read this, or identify an object. "
+            "Only call tools when the user clearly asks for movement, room location, navigation, vision, time, calculation, or sleep. "
             "If the user says 'go to sleep', 'stop listening', or 'that's all', call go_to_sleep."
         )
         tools = (
             [calculator, current_time]
             + self._movement.make_tools()
             + self._semantic_map.make_tools()
+            + self._vision.make_tools()
             + [self._make_sleep_tool(stop_event)]
         )
         agent = BidiAgent(model=model, tools=tools, system_prompt=system_prompt)
