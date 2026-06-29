@@ -12,7 +12,19 @@ from strands import tool
 
 MAX_LINEAR_SPEED_MS = 0.5
 MAX_ANGULAR_SPEED_RADS = 2.0
-MAX_DURATION_S = 10.0
+MAX_DURATION_S = 15.0
+MAX_SPIN_DURATION_S = 30.0
+SPIN_MONITOR_HZ = 20.0
+SPIN_TOLERANCE_DEG = 8.0
+DEFAULT_LINEAR_SPEED_MS = 0.25
+DEFAULT_TURN_ANGULAR_SPEED_RADS = 0.5
+DEFAULT_SPIN_ANGULAR_SPEED_RADS = 0.35
+DEFAULT_TURN_DURATION_S = 1.5
+DEFAULT_SPIN_DEGREES = 360.0
+
+
+def _angle_delta_degrees(current: float, previous: float) -> float:
+    return (current - previous + 180.0) % 360.0 - 180.0
 
 
 @dataclass
@@ -86,13 +98,43 @@ class MovementController:
         self._stop_event.wait(timeout=duration_s)
         self.publish_twist(0.0, 0.0)
 
+    def spin_by_degrees(self, angular_z: float, degrees: float, timeout_s: float) -> tuple[bool, float, float]:
+        self._stop_event.clear()
+        snap = self._odom_cache
+        if snap is None:
+            self.timed_move(0.0, angular_z, timeout_s)
+            return False, 0.0, timeout_s
+
+        target = abs(degrees)
+        accumulated = 0.0
+        previous_theta = snap.theta_deg
+        started_at = time.monotonic()
+        deadline = started_at + timeout_s
+        period_s = 1.0 / SPIN_MONITOR_HZ
+
+        self.publish_twist(0.0, angular_z)
+        while not self._stop_event.is_set() and time.monotonic() < deadline:
+            self._stop_event.wait(timeout=period_s)
+            latest = self._odom_cache
+            if latest is None:
+                continue
+            delta = _angle_delta_degrees(latest.theta_deg, previous_theta)
+            previous_theta = latest.theta_deg
+            accumulated += abs(delta)
+            if accumulated >= target - SPIN_TOLERANCE_DEG:
+                self.publish_twist(0.0, 0.0)
+                return True, accumulated, time.monotonic() - started_at
+
+        self.publish_twist(0.0, 0.0)
+        return False, accumulated, time.monotonic() - started_at
+
     def make_tools(self) -> list:
         """Return Strands @tool functions bound to this controller."""
         ctrl = self
 
         @tool
-        def move_forward(speed_ms: float, duration_s: float) -> str:
-            """Move the robot forward at speed_ms (m/s) for duration_s seconds."""
+        def move_forward(speed_ms: float = DEFAULT_LINEAR_SPEED_MS, duration_s: float = 1.0) -> str:
+            """Move the robot forward. Use defaults for casual requests unless the user gives a speed or duration."""
             try:
                 speed, duration, warnings = _validate_linear(speed_ms, duration_s)
             except ValueError as e:
@@ -104,8 +146,8 @@ class MovementController:
             return msg
 
         @tool
-        def move_backward(speed_ms: float, duration_s: float) -> str:
-            """Move the robot backward at speed_ms (m/s) for duration_s seconds."""
+        def move_backward(speed_ms: float = DEFAULT_LINEAR_SPEED_MS, duration_s: float = 1.0) -> str:
+            """Move the robot backward. Use defaults for casual requests unless the user gives a speed or duration."""
             try:
                 speed, duration, warnings = _validate_linear(speed_ms, duration_s)
             except ValueError as e:
@@ -117,8 +159,8 @@ class MovementController:
             return msg
 
         @tool
-        def turn_left(angular_speed_rads: float, duration_s: float) -> str:
-            """Turn the robot left (counter-clockwise) at angular_speed_rads (rad/s) for duration_s seconds."""
+        def turn_left(angular_speed_rads: float = DEFAULT_TURN_ANGULAR_SPEED_RADS, duration_s: float = DEFAULT_TURN_DURATION_S) -> str:
+            """Turn the robot left briefly. For a full in-place rotation, use spin_on_the_spot instead."""
             try:
                 speed, duration, warnings = _validate_angular(angular_speed_rads, duration_s)
             except ValueError as e:
@@ -130,14 +172,45 @@ class MovementController:
             return msg
 
         @tool
-        def turn_right(angular_speed_rads: float, duration_s: float) -> str:
-            """Turn the robot right (clockwise) at angular_speed_rads (rad/s) for duration_s seconds."""
+        def turn_right(angular_speed_rads: float = DEFAULT_TURN_ANGULAR_SPEED_RADS, duration_s: float = DEFAULT_TURN_DURATION_S) -> str:
+            """Turn the robot right briefly. For a full in-place rotation, use spin_on_the_spot instead."""
             try:
                 speed, duration, warnings = _validate_angular(angular_speed_rads, duration_s)
             except ValueError as e:
                 return f"ERROR: {e}"
             ctrl.timed_move(0.0, -speed, duration)
             msg = f"Turning right at {speed} rad/s for {duration} s"
+            if warnings:
+                msg += " [WARNING: " + "; ".join(warnings) + "]"
+            return msg
+
+        @tool
+        def spin_on_the_spot(direction: str = "left", degrees: float = DEFAULT_SPIN_DEGREES, angular_speed_rads: float = DEFAULT_SPIN_ANGULAR_SPEED_RADS) -> str:
+            """Spin on the spot/in place by rotating the wheels in opposite directions. Use for 'spin on a spot', 'spin on the spot', 'do a 360', or 'turn around fully'."""
+            direction_normalized = direction.strip().lower() if isinstance(direction, str) else "left"
+            if direction_normalized in ("clockwise", "right", "cw"):
+                sign = -1.0
+                direction_label = "right"
+            elif direction_normalized in ("counter-clockwise", "counterclockwise", "left", "ccw"):
+                sign = 1.0
+                direction_label = "left"
+            else:
+                return "ERROR: direction must be left/right, clockwise/counter-clockwise, cw, or ccw"
+            if degrees <= 0.0:
+                return "ERROR: degrees must be > 0.0"
+            try:
+                speed, _, warnings = _validate_angular(angular_speed_rads, 1.0)
+            except ValueError as e:
+                return f"ERROR: {e}"
+            estimated_duration_s = math.radians(degrees) / speed
+            timeout_s = min(MAX_SPIN_DURATION_S, max(estimated_duration_s * 2.0, estimated_duration_s + 3.0))
+            completed, actual_degrees, elapsed_s = ctrl.spin_by_degrees(sign * speed, degrees, timeout_s)
+            if completed:
+                msg = f"Spun on the spot {direction_label} by {actual_degrees:.0f} degrees in {elapsed_s:.2f} s"
+            elif ctrl._odom_cache is None:
+                msg = f"Spun on the spot {direction_label} using timed fallback for {elapsed_s:.2f} s; odometry was not available"
+            else:
+                msg = f"Spin timed out after {elapsed_s:.2f} s at about {actual_degrees:.0f} degrees; movement calibration needs attention"
             if warnings:
                 msg += " [WARNING: " + "; ".join(warnings) + "]"
             return msg
@@ -160,4 +233,4 @@ class MovementController:
                 f"linear_vel={snap.linear_vel:.3f} m/s, angular_vel={snap.angular_vel:.3f} rad/s"
             )
 
-        return [move_forward, move_backward, turn_left, turn_right, stop_robot, get_odometry]
+        return [move_forward, move_backward, spin_on_the_spot, turn_left, turn_right, stop_robot, get_odometry]

@@ -5,6 +5,7 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from ament_index_python.packages import get_package_share_directory
 import os
 from launch.actions import DeclareLaunchArgument
+from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration
 
 
@@ -36,6 +37,11 @@ def generate_launch_description():
         DeclareLaunchArgument('endpointing_sensitivity', default_value='LOW'),
         DeclareLaunchArgument('idle_timeout_seconds', default_value='45.0'),
         DeclareLaunchArgument('max_session_seconds', default_value='420.0'),
+        DeclareLaunchArgument(
+            'enable_lidar',
+            default_value='true',
+            description='Start the sllidar node. Set false for desk testing.',
+        ),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(eyes_launch_path)
         ),
@@ -90,6 +96,7 @@ def generate_launch_description():
             package='sllidar_ros2',
             executable='sllidar_node',
             name='sllidar_node',
+            condition=IfCondition(LaunchConfiguration('enable_lidar')),
             parameters=[{'channel_type': channel_type,
                          'serial_port': serial_port,
                          'serial_baudrate': serial_baudrate,

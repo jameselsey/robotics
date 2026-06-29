@@ -1,4 +1,4 @@
-.PHONY: clean build launch-joystick venv rviz build-rviz save-map publish-room-markers
+.PHONY: clean build launch-joystick launch-senses launch-senses-desk venv rviz build-rviz save-map publish-room-markers
 
 # Virtual environment setup
 VENV_DIR = ros_venv
@@ -61,6 +61,10 @@ launch-drive:
 
 launch-senses:
 	@bash -c "source /opt/ros/jazzy/setup.bash && source install/setup.bash && source ~/vendor_ws/install/setup.bash && ros2 launch senses senses.launch.py"
+
+launch-senses-desk:
+	@echo "Launching senses without LiDAR for desk testing."
+	@bash -c "source /opt/ros/jazzy/setup.bash && source install/setup.bash && source ~/vendor_ws/install/setup.bash && ros2 launch senses senses.launch.py enable_lidar:=false"
 
 launch:
 	@bash -c "$(VENV_ACTIVATE) && source install/setup.bash && source ~/vendor_ws/install/setup.bash && ros2 launch bringup all.launch.py $(ARGS)"
