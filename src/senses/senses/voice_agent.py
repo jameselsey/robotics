@@ -60,7 +60,11 @@ class VoiceAgent(Node):
         self.get_logger().info("Voice agent node started (wake word + Nova Sonic bidi).")
 
         self.state_pub = self.create_publisher(String, "voice_state", 10)
+        self.create_subscription(String, "voice_control", self._voice_control_callback, 10)
         self._movement = MovementController(self)
+        self._manual_wake_event = threading.Event()
+        self._conversation_stop_event: threading.Event | None = None
+        self._conversation_lock = threading.Lock()
 
         self.declare_parameter("oww_host", "127.0.0.1")
         self.declare_parameter("oww_port", 10400)
@@ -197,6 +201,23 @@ class VoiceAgent(Node):
         self.state_pub.publish(msg)
         self.get_logger().info(f"Voice state: {state}")
 
+    def _voice_control_callback(self, msg: String) -> None:
+        command = (msg.data or "").strip().lower()
+        if command == "wake":
+            self.get_logger().info("Voice control wake requested")
+            self._manual_wake_event.set()
+            return
+        if command == "stop":
+            self.get_logger().info("Voice control stop requested")
+            with self._conversation_lock:
+                stop_event = self._conversation_stop_event
+            if stop_event is not None:
+                stop_event.set()
+            else:
+                self._manual_wake_event.clear()
+            return
+        self.get_logger().warn(f"Ignoring unknown voice control command: {msg.data!r}")
+
     def _log_audio_devices(self) -> None:
         for i in range(self.pa.get_device_count()):
             info = self.pa.get_device_info_by_index(i)
@@ -257,6 +278,12 @@ class VoiceAgent(Node):
                 detected_name = None
 
                 while rclpy.ok() and not self._stop:
+                    if self._manual_wake_event.is_set():
+                        self._manual_wake_event.clear()
+                        detected = True
+                        detected_name = "controller"
+                        break
+
                     pcm_bytes = mic_stream.read(self.chunk_size, exception_on_overflow=False)
                     wyoming_send_event(
                         sock,
@@ -453,6 +480,8 @@ class VoiceAgent(Node):
     async def _run_conversation(self):
         self._publish_state("conversation")
         stop_event = threading.Event()
+        with self._conversation_lock:
+            self._conversation_stop_event = stop_event
         activity = ActivityTracker()
         playback_state = PlaybackState()
         far_end_buffer = FarEndReferenceBuffer()
@@ -590,6 +619,9 @@ class VoiceAgent(Node):
             if task is not run_task:
                 task.cancel()
         await asyncio.gather(run_task, stop_task, idle_task, heartbeat_task, max_task, return_exceptions=True)
+        with self._conversation_lock:
+            if self._conversation_stop_event is stop_event:
+                self._conversation_stop_event = None
         self._publish_state("sleeping")
         return reason
 

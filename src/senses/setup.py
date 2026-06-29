@@ -31,6 +31,7 @@ setup(
             'screen = senses.screen:main',
             'voice_agent = senses.voice_agent:main',
             'room_markers = senses.room_markers:main',
+            'joystick_voice_control = senses.joystick_voice_control:main',
         ],
     },
     package_data={

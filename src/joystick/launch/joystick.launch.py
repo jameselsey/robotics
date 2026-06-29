@@ -28,11 +28,19 @@ def generate_launch_description():
             parameters=[joy_params, {'use_sim_time': use_sim_time}]
          )
 
+    joystick_voice_control_node = Node(
+            package='senses',
+            executable='joystick_voice_control',
+            name='joystick_voice_control',
+            parameters=[{'use_sim_time': use_sim_time}]
+         )
+
     return LaunchDescription([
         DeclareLaunchArgument(
             'use_sim_time',
             default_value='false',
             description='Use sim time if true'),
         joy_node,
-        teleop_node
+        teleop_node,
+        joystick_voice_control_node
     ])
