@@ -22,7 +22,7 @@ def generate_launch_description():
         DeclareLaunchArgument("laser_x", default_value="0.0"),
         DeclareLaunchArgument("laser_y", default_value="0.0"),
         DeclareLaunchArgument("laser_z", default_value="0.16"),
-        DeclareLaunchArgument("laser_yaw", default_value="0.0"),
+        DeclareLaunchArgument("laser_yaw", default_value="3.141592653589793"),
         Node(
             package="tf2_ros",
             executable="static_transform_publisher",

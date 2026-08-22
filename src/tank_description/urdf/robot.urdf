@@ -22,7 +22,7 @@
       <geometry>
         <box size="0.16 0.14 0.05"/>
       </geometry>
-      <origin xyz="0.07 0 0.10"/>
+      <origin xyz="-0.07 0 0.10"/>
       <material name="BlueTop">
         <color rgba="0.2 0.2 0.8 1"/>
       </material>
@@ -32,7 +32,7 @@
       <geometry>
         <box size="0.16 0.14 0.05"/>
       </geometry>
-      <origin xyz="0.07 0 0.15"/>
+      <origin xyz="-0.07 0 0.15"/>
       <material name="silver">
         <color rgba="0.7 0.7 0.7 1.0"/>
       </material>
@@ -98,7 +98,7 @@
   <joint name="left_wheel_joint" type="continuous">
     <parent link="base_link"/>
     <child link="left_wheel"/>
-    <origin xyz="-0.11 0.13 0"/>
+    <origin xyz="0.11 0.13 0"/>
     <axis xyz="0 1 0"/>
   </joint>
   <!-- Right drive wheel (continuous around +Y) -->
@@ -116,7 +116,7 @@
   <joint name="right_wheel_joint" type="continuous">
     <parent link="base_link"/>
     <child link="right_wheel"/>
-    <origin xyz="-0.11 -0.13 0"/>
+    <origin xyz="0.11 -0.13 0"/>
     <axis xyz="0 1 0"/>
   </joint>
   <!-- Left idler (fixed) -->
@@ -134,7 +134,7 @@
   <joint name="left_idler_joint" type="fixed">
     <parent link="base_link"/>
     <child link="left_idler"/>
-    <origin xyz="0.11 0.13 0"/>
+    <origin xyz="-0.11 0.13 0"/>
   </joint>
   <!-- Right idler (fixed) -->
   <link name="right_idler">
@@ -151,6 +151,6 @@
   <joint name="right_idler_joint" type="fixed">
     <parent link="base_link"/>
     <child link="right_idler"/>
-    <origin xyz="0.11 -0.13 0"/>
+    <origin xyz="-0.11 -0.13 0"/>
   </joint>
 </robot>
