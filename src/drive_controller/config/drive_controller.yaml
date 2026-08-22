@@ -1,0 +1,45 @@
+drive_controller:
+  ros__parameters:
+    # BTS7960 motor driver GPIO (BCM numbering). Use -1 for hard-wired enable.
+    left_rpwm_pin: 22
+    left_lpwm_pin: 17
+    left_r_en_pin: -1
+    left_l_en_pin: -1
+    right_rpwm_pin: 13
+    right_lpwm_pin: 26
+    right_r_en_pin: -1
+    right_l_en_pin: -1
+
+    # Quadrature encoder GPIO and filtering.
+    left_enc_a: 25
+    left_enc_b: 24
+    right_enc_a: 5
+    right_enc_b: 6
+    enc_bounce_time: 0.0005
+    left_enc_invert: true
+    right_enc_invert: false
+
+    # Differential-drive geometry and measured distance calibration.
+    wheel_radius_m: 0.026
+    wheel_base_m: 0.19
+    counts_per_rev: 230
+    left_distance_scale: 0.81
+    right_distance_scale: 0.81
+
+    # ROS frames and publication rates.
+    odom_frame: odom
+    base_frame: base_link
+    odom_rate_hz: 50.0
+    diagnostics_enabled: true
+    diagnostics_rate_hz: 2.0
+
+    # Command-to-motor mapping and diagnostics thresholds.
+    vmax: 0.5
+    linear_gain: 1.0
+    angular_gain: 1.0
+    left_motor_trim: 1.0
+    right_motor_trim: 1.0
+    max_angular_for_full_spin: 0.5
+    encoder_stall_ticks_per_sec: 1.0
+    encoder_command_deadband: 0.05
+    log_steps: false

@@ -57,11 +57,15 @@ def generate_launch_description():
     )
 
     # Drive controller node
+    drive_controller_params = os.path.join(
+        get_package_share_directory('drive_controller'), 'config', 'drive_controller.yaml'
+    )
     drive_controller_node = Node(
         package='drive_controller',
         executable='drive_controller',
         name='drive_controller',
-        output='screen'
+        output='screen',
+        parameters=[drive_controller_params],
     )
 
     # robot description node to get the urdf onto /robot_description
