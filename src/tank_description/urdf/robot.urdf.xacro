@@ -13,23 +13,23 @@
       </material>
     </visual>
 
-    <!-- Middle block (moved to -X so it looks like the rear) -->
+    <!-- Rear enclosure, aligned with the physical robot -->
     <visual>
       <geometry>
         <box size="0.16 0.14 0.05"/>
       </geometry>
-      <origin xyz="-0.07 0 0.10"/> <!-- was +0.07; negative puts it behind the base center -->
+      <origin xyz="0.07 0 0.10"/>
       <material name="BlueTop">
         <color rgba="0.2 0.2 0.8 1"/>
       </material>
     </visual>
 
-    <!-- Top block (also moved to -X) -->
+    <!-- Top of the rear enclosure -->
     <visual>
       <geometry>
         <box size="0.16 0.14 0.05"/>
       </geometry>
-      <origin xyz="-0.07 0 0.15"/>
+      <origin xyz="0.07 0 0.15"/>
       <material name="silver">
         <color rgba="0.7 0.7 0.7 1.0"/>
       </material>
