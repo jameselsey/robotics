@@ -17,6 +17,8 @@ DEFAULT_COVARIANCE = [0.0] * 36
 DEFAULT_COVARIANCE[0] = 0.25
 DEFAULT_COVARIANCE[7] = 0.25
 DEFAULT_COVARIANCE[35] = 0.0685
+MAX_SAVED_POSITION_VARIANCE = 0.20
+MAX_SAVED_YAW_VARIANCE = 0.25
 
 
 class LocalizationPoseManager(Node):
@@ -38,6 +40,7 @@ class LocalizationPoseManager(Node):
         self.localized = False
         self.started_at = time.monotonic()
         self.last_saved_at = 0.0
+        self.last_rejected_log_at = 0.0
 
         self.initial_pose_pub = self.create_publisher(
             PoseWithCovarianceStamped, '/initialpose', 10
@@ -121,6 +124,21 @@ class LocalizationPoseManager(Node):
         now = time.monotonic()
         if now - self.last_saved_at < 2.0:
             return
+
+        covariance = message.pose.covariance
+        if (
+            covariance[0] > MAX_SAVED_POSITION_VARIANCE
+            or covariance[7] > MAX_SAVED_POSITION_VARIANCE
+            or covariance[35] > MAX_SAVED_YAW_VARIANCE
+        ):
+            if now - self.last_rejected_log_at >= 30.0:
+                self.get_logger().warning(
+                    'AMCL pose is too uncertain to persist; retaining the '
+                    'last confident pose'
+                )
+                self.last_rejected_log_at = now
+            return
+
         self.last_saved_at = now
         pose = message.pose.pose
         state = {
@@ -131,7 +149,7 @@ class LocalizationPoseManager(Node):
             'qy': pose.orientation.y,
             'qz': pose.orientation.z,
             'qw': pose.orientation.w,
-            'covariance': list(message.pose.covariance),
+            'covariance': list(covariance),
         }
         self._write_pose(state)
 

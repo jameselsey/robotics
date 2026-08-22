@@ -17,6 +17,8 @@ from strands.experimental.bidi.types.events import (
 )
 
 from senses.audio_feedback import LedController
+from senses.audio_activity import counts_as_activity
+
 
 class AudioBuffer:
     """Small byte buffer used by the PyAudio playback callback."""
@@ -257,13 +259,23 @@ class DirectAudioInput:
                 self.output_muted_chunk_count += 1
                 data = b"\x00" * len(data)
             else:
-                if amp >= self._threshold:
-                    self.active_chunk_count += 1
-                    self._activity.mark()
                 speech_detected = (
                     self._audio_processor is not None
                     and self.speech_probability >= self._speech_gate_threshold
                 )
+                # Only extend the conversation for audio that can actually be
+                # sent to Nova. Previously, background noise between the lower
+                # activity threshold and the silence-gate threshold kept the
+                # local session alive while Nova received only zeroed frames.
+                if counts_as_activity(
+                    amp,
+                    self._threshold,
+                    self._silence_gate_enabled,
+                    self._silence_gate_threshold,
+                    speech_detected,
+                ):
+                    self.active_chunk_count += 1
+                    self._activity.mark()
                 # Preserve low-amplitude frames when WebRTC still thinks they contain speech.
                 if self._silence_gate_enabled and amp < self._silence_gate_threshold and not speech_detected:
                     self.gated_chunk_count += 1

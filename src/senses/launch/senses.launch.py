@@ -42,7 +42,9 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument('endpointing_sensitivity', default_value='LOW'),
         DeclareLaunchArgument('idle_timeout_seconds', default_value='45.0'),
-        DeclareLaunchArgument('max_session_seconds', default_value='420.0'),
+        # Bedrock closes inactive bidirectional streams after about 295 seconds.
+        # End our session first so audio and LED resources are cleaned up locally.
+        DeclareLaunchArgument('max_session_seconds', default_value='240.0'),
         DeclareLaunchArgument(
             'enable_lidar',
             default_value='true',
