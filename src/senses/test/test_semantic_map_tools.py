@@ -23,6 +23,7 @@ action_msgs.msg = action_msgs_msg
 geometry_msgs = types.ModuleType("geometry_msgs")
 geometry_msgs_msg = types.ModuleType("geometry_msgs.msg")
 geometry_msgs_msg.PoseStamped = object
+geometry_msgs_msg.PoseWithCovarianceStamped = object
 geometry_msgs.msg = geometry_msgs_msg
 
 rclpy = types.ModuleType("rclpy")
@@ -54,6 +55,8 @@ sys.modules.setdefault("tf2_ros", tf2_ros)
 geometry_msgs_msg = sys.modules["geometry_msgs.msg"]
 if not hasattr(geometry_msgs_msg, "PoseStamped"):
     geometry_msgs_msg.PoseStamped = object
+if not hasattr(geometry_msgs_msg, "PoseWithCovarianceStamped"):
+    geometry_msgs_msg.PoseWithCovarianceStamped = object
 sys.modules["geometry_msgs"].msg = geometry_msgs_msg
 
 semantic = importlib.import_module("senses.semantic_map_tools")
@@ -108,3 +111,24 @@ def test_reviewed_navigation_pose_takes_precedence_over_centroid():
     )
     assert goal[:3] == pytest.approx((2.4, -0.1, 0.5))
     assert goal[3] == "navigate_pose"
+
+
+def test_navigation_rejects_missing_localization_estimate():
+    error = semantic._localization_confidence_error(None)
+    assert "not published" in error
+
+
+def test_navigation_accepts_confident_localization_estimate():
+    covariance = [0.0] * 36
+    covariance[0] = 0.10
+    covariance[7] = 0.12
+    covariance[35] = 0.20
+    assert semantic._localization_confidence_error(covariance) is None
+
+
+@pytest.mark.parametrize("index", [0, 7, 35])
+def test_navigation_rejects_uncertain_localization_axis(index):
+    covariance = [0.0] * 36
+    covariance[index] = 0.30
+    error = semantic._localization_confidence_error(covariance)
+    assert "too uncertain" in error

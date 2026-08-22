@@ -7,7 +7,7 @@ import re
 import rclpy
 import yaml
 from action_msgs.msg import GoalStatus
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped
 from rclpy.action import ActionClient
 from rclpy.duration import Duration
 from strands import tool
@@ -41,6 +41,48 @@ _GOAL_STATUS_NAMES = {
     GoalStatus.STATUS_CANCELED: "canceled",
     GoalStatus.STATUS_ABORTED: "aborted",
 }
+
+MAX_NAVIGATION_POSITION_VARIANCE = 0.20
+MAX_NAVIGATION_YAW_VARIANCE = 0.25
+
+
+def _localization_confidence_error(covariance) -> str | None:
+    """Return why an AMCL estimate is unsafe for navigation, if applicable."""
+    if covariance is None or len(covariance) < 36:
+        return "AMCL has not published a localization estimate yet"
+
+    x_variance = float(covariance[0])
+    y_variance = float(covariance[7])
+    yaw_variance = float(covariance[35])
+    if not all(math.isfinite(value) for value in (x_variance, y_variance, yaw_variance)):
+        return "AMCL localization covariance is invalid"
+    if (
+        x_variance > MAX_NAVIGATION_POSITION_VARIANCE
+        or y_variance > MAX_NAVIGATION_POSITION_VARIANCE
+        or yaw_variance > MAX_NAVIGATION_YAW_VARIANCE
+    ):
+        return (
+            "AMCL localization is too uncertain for autonomous movement "
+            f"(x={x_variance:.3f}, y={y_variance:.3f}, "
+            f"yaw={yaw_variance:.3f})"
+        )
+    return None
+
+
+def _safe_navigation_behavior_tree() -> str:
+    """Return Nav2's path-following tree without physical recovery motions."""
+    try:
+        from ament_index_python.packages import get_package_share_directory
+
+        share = Path(get_package_share_directory("nav2_bt_navigator"))
+    except Exception:
+        return ""
+    path = (
+        share
+        / "behavior_trees"
+        / "navigate_w_replanning_only_if_path_becomes_invalid.xml"
+    )
+    return str(path) if path.exists() else ""
 
 
 def _normalise_room_name(value: str) -> str:
@@ -137,9 +179,19 @@ class SemanticMapController:
         self._goal_handle = None
         self._navigation_room = None
         self._navigation_status = "idle"
+        self._localization_covariance = None
+        ros_node.create_subscription(
+            PoseWithCovarianceStamped,
+            "/amcl_pose",
+            self._amcl_pose_callback,
+            10,
+        )
         if NavigateToPose is not None:
             self._nav_client = ActionClient(ros_node, NavigateToPose, "navigate_to_pose")
         self._load_config()
+
+    def _amcl_pose_callback(self, message) -> None:
+        self._localization_covariance = list(message.pose.covariance)
 
     def _load_config(self) -> None:
         if not self._config_path.exists():
@@ -343,6 +395,14 @@ class SemanticMapController:
                     f"ERROR: Room '{key}' has no reviewed navigate_pose. "
                     "A polygon centre is useful for labels but is not automatically safe to drive to."
                 )
+            confidence_error = _localization_confidence_error(
+                ctrl._localization_covariance
+            )
+            if confidence_error:
+                return (
+                    f"ERROR: {confidence_error}. Navigation was not started. "
+                    "Slowly rotate the robot under manual control to relocalize, then try again."
+                )
             if ctrl._nav_client is None:
                 return "ERROR: nav2_msgs is not installed, so I cannot send Nav2 goals."
             if not ctrl._nav_client.wait_for_server(timeout_sec=2.0):
@@ -375,6 +435,7 @@ class SemanticMapController:
             qz, qw = _yaw_to_quaternion(yaw)
             goal.pose.pose.orientation.z = qz
             goal.pose.pose.orientation.w = qw
+            goal.behavior_tree = _safe_navigation_behavior_tree()
 
             ctrl._navigation_room = key
             ctrl._navigation_status = "requesting"
