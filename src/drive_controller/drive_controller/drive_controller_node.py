@@ -40,8 +40,8 @@ class DriveController(Node):
         self.declare_parameter('wheel_radius_m', 0.026)
         self.declare_parameter('wheel_base_m', 0.19)
         self.declare_parameter('counts_per_rev', 230)
-        self.declare_parameter('left_distance_scale', 0.91)
-        self.declare_parameter('right_distance_scale', 0.91)
+        self.declare_parameter('left_distance_scale', 0.81)
+        self.declare_parameter('right_distance_scale', 0.81)
 
         # Odom / frames
         self.declare_parameter('odom_frame', 'odom')
