@@ -1,8 +1,10 @@
+import json
 import math
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Twist, TransformStamped
 from nav_msgs.msg import Odometry
+from std_msgs.msg import String
 import tf_transformations
 import tf2_ros
 
@@ -28,8 +30,8 @@ class DriveController(Node):
         self.declare_parameter('right_l_en_pin', -1)
 
         # Encoders
-        self.declare_parameter('left_enc_a', 24)
-        self.declare_parameter('left_enc_b', 25)
+        self.declare_parameter('left_enc_a', 25)
+        self.declare_parameter('left_enc_b', 24)
         self.declare_parameter('right_enc_a', 5)
         self.declare_parameter('right_enc_b', 6)
         self.declare_parameter('enc_bounce_time', 0.0005)
@@ -38,6 +40,8 @@ class DriveController(Node):
         self.declare_parameter('wheel_radius_m', 0.026)
         self.declare_parameter('wheel_base_m', 0.19)
         self.declare_parameter('counts_per_rev', 230)
+        self.declare_parameter('left_distance_scale', 0.91)
+        self.declare_parameter('right_distance_scale', 0.91)
 
         # Odom / frames
         self.declare_parameter('odom_frame', 'odom')
@@ -48,9 +52,15 @@ class DriveController(Node):
         self.declare_parameter('vmax', 0.5)            # m/s -> 100% PWM at this speed
         self.declare_parameter('linear_gain', 1.0)
         self.declare_parameter('angular_gain', 1.0)
-        self.declare_parameter('left_enc_invert', False)
+        self.declare_parameter('left_motor_trim', 1.0)
+        self.declare_parameter('right_motor_trim', 1.0)
+        self.declare_parameter('left_enc_invert', True)
         self.declare_parameter('right_enc_invert', False)
         self.declare_parameter('log_steps', False)
+        self.declare_parameter('diagnostics_enabled', True)
+        self.declare_parameter('diagnostics_rate_hz', 2.0)
+        self.declare_parameter('encoder_stall_ticks_per_sec', 1.0)
+        self.declare_parameter('encoder_command_deadband', 0.05)
         self.declare_parameter('max_angular_for_full_spin', 0.5)
         
         p = self.get_parameter
@@ -82,6 +92,8 @@ class DriveController(Node):
         self.wheel_radius = float(p('wheel_radius_m').value)
         self.wheel_base = float(p('wheel_base_m').value)
         self.counts_per_rev = float(p('counts_per_rev').value)
+        self.left_distance_scale = float(p('left_distance_scale').value)
+        self.right_distance_scale = float(p('right_distance_scale').value)
         self.m_per_tick = (2.0 * math.pi * self.wheel_radius) / self.counts_per_rev
 
         la, lb = p('left_enc_a').value, p('left_enc_b').value
@@ -91,6 +103,9 @@ class DriveController(Node):
         self.left_invert = bool(p('left_enc_invert').value)
         self.right_invert = bool(p('right_enc_invert').value)
         self.log_steps = bool(p('log_steps').value)
+        self.diagnostics_enabled = bool(p('diagnostics_enabled').value)
+        self.encoder_stall_ticks_per_sec = float(p('encoder_stall_ticks_per_sec').value)
+        self.encoder_command_deadband = float(p('encoder_command_deadband').value)
 
         self.left_enc = RotaryEncoder(la, lb, max_steps=0, wrap=False, bounce_time=bounce) if la >= 0 and lb >= 0 else None
         self.right_enc = RotaryEncoder(ra, rb, max_steps=0, wrap=False, bounce_time=bounce) if ra >= 0 and rb >= 0 else None
@@ -107,15 +122,26 @@ class DriveController(Node):
         self.base_frame = p('base_frame').value
 
         self.current_cmd = Twist()
+        self.current_pwm_left = 0.0
+        self.current_pwm_right = 0.0
+        self.last_diag_left_steps = 0
+        self.last_diag_right_steps = 0
+        self.last_diag_time = self.get_clock().now()
         self.sub = self.create_subscription(Twist, '/cmd_vel', self.cmd_callback, 10)
+        self.diagnostics_pub = self.create_publisher(String, '/wheel_diagnostics', 10)
 
         rate_hz = float(p('odom_rate_hz').value)
         self.timer = self.create_timer(1.0 / rate_hz, self.update)
+        diagnostics_rate_hz = float(p('diagnostics_rate_hz').value)
+        if self.diagnostics_enabled and diagnostics_rate_hz > 0.0:
+            self.diagnostics_timer = self.create_timer(1.0 / diagnostics_rate_hz, self.publish_wheel_diagnostics)
+        else:
+            self.diagnostics_timer = None
 
         self.get_logger().info(
             f"BTS7960 pins L(RPWM,LPWM,EN)={(p('left_rpwm_pin').value, p('left_lpwm_pin').value, p('left_r_en_pin').value)} "
             f"R(RPWM,LPWM,EN)={(p('right_rpwm_pin').value, p('right_lpwm_pin').value, p('right_r_en_pin').value)}; "
-            f"m_per_tick={self.m_per_tick:.6e}, bounce_time={bounce}s"
+            f"m_per_tick={self.m_per_tick:.6e}, distance_scale=(L={self.left_distance_scale:.3f}, R={self.right_distance_scale:.3f}), bounce_time={bounce}s"
         )
 
     # ----------------- Control -----------------
@@ -140,11 +166,19 @@ class DriveController(Node):
         left_speed  = linear - (angular * half_track)
         right_speed = linear + (angular * half_track)
 
+        left_trim = float(self.get_parameter('left_motor_trim').value)
+        right_trim = float(self.get_parameter('right_motor_trim').value)
+        left_speed *= left_trim
+        right_speed *= right_trim
+
         left_speed  = max(min(left_speed,  vmax), -vmax)
         right_speed = max(min(right_speed, vmax), -vmax)
 
         pwm_left  = 0.0 if vmax <= 0 else left_speed  / vmax
         pwm_right = 0.0 if vmax <= 0 else right_speed / vmax
+
+        self.current_pwm_left = pwm_left
+        self.current_pwm_right = pwm_right
 
         self.drive_motor('left',  pwm_left)
         self.drive_motor('right', pwm_right)
@@ -164,12 +198,14 @@ class DriveController(Node):
         if left_steps is not None:
             dl = left_steps - self.last_left_steps
             if self.left_invert: dl = -dl
-            d_left = dl * self.m_per_tick
+            self.left_distance_scale = float(self.get_parameter('left_distance_scale').value)
+            d_left = dl * self.m_per_tick * self.left_distance_scale
             self.last_left_steps = left_steps
         if right_steps is not None:
             dr = right_steps - self.last_right_steps
             if self.right_invert: dr = -dr
-            d_right = dr * self.m_per_tick
+            self.right_distance_scale = float(self.get_parameter('right_distance_scale').value)
+            d_right = dr * self.m_per_tick * self.right_distance_scale
             self.last_right_steps = right_steps
 
         if (self.left_enc is None) and (self.right_enc is None):
@@ -196,6 +232,66 @@ class DriveController(Node):
 
         if self.log_steps:
             self.get_logger().info(f"steps L={left_steps} R={right_steps}  dL={d_left:.4f} dR={d_right:.4f}  v={v_meas:.3f} w={w_meas:.3f}")
+
+    def publish_wheel_diagnostics(self):
+        now = self.get_clock().now()
+        dt = (now - self.last_diag_time).nanoseconds * 1e-9
+        if dt <= 0.0:
+            return
+        self.last_diag_time = now
+
+        left_steps = self.left_enc.steps if self.left_enc else None
+        right_steps = self.right_enc.steps if self.right_enc else None
+        left_delta = None if left_steps is None else left_steps - self.last_diag_left_steps
+        right_delta = None if right_steps is None else right_steps - self.last_diag_right_steps
+        if left_steps is not None:
+            self.last_diag_left_steps = left_steps
+        if right_steps is not None:
+            self.last_diag_right_steps = right_steps
+
+        left_ticks_per_sec = None if left_delta is None else left_delta / dt
+        right_ticks_per_sec = None if right_delta is None else right_delta / dt
+        left_mps = None if left_ticks_per_sec is None else left_ticks_per_sec * self.m_per_tick * self.left_distance_scale
+        right_mps = None if right_ticks_per_sec is None else right_ticks_per_sec * self.m_per_tick * self.right_distance_scale
+
+        warnings = []
+        if abs(self.current_pwm_left) > self.encoder_command_deadband:
+            if left_ticks_per_sec is None:
+                warnings.append('left encoder missing')
+            elif abs(left_ticks_per_sec) < self.encoder_stall_ticks_per_sec:
+                warnings.append('left encoder not counting while left motor commanded')
+        if abs(self.current_pwm_right) > self.encoder_command_deadband:
+            if right_ticks_per_sec is None:
+                warnings.append('right encoder missing')
+            elif abs(right_ticks_per_sec) < self.encoder_stall_ticks_per_sec:
+                warnings.append('right encoder not counting while right motor commanded')
+
+        payload = {
+            'left_steps': left_steps,
+            'right_steps': right_steps,
+            'left_delta': left_delta,
+            'right_delta': right_delta,
+            'left_ticks_per_sec': left_ticks_per_sec,
+            'right_ticks_per_sec': right_ticks_per_sec,
+            'left_mps': left_mps,
+            'right_mps': right_mps,
+            'left_distance_scale': self.left_distance_scale,
+            'right_distance_scale': self.right_distance_scale,
+            'cmd_linear_x': self.current_cmd.linear.x,
+            'left_motor_trim': float(self.get_parameter('left_motor_trim').value),
+            'right_motor_trim': float(self.get_parameter('right_motor_trim').value),
+            'cmd_angular_z': self.current_cmd.angular.z,
+            'pwm_left': self.current_pwm_left,
+            'pwm_right': self.current_pwm_right,
+            'warnings': warnings,
+        }
+        msg = String()
+        msg.data = json.dumps(payload, sort_keys=True)
+        self.diagnostics_pub.publish(msg)
+        if warnings:
+            self.get_logger().warn('; '.join(warnings))
+        elif self.log_steps:
+            self.get_logger().info(msg.data)
 
     # ----------------- Hardware helpers (BTS7960) -----------------
     def drive_motor(self, side, pwm_val):
