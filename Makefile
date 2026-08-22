@@ -70,14 +70,14 @@ launch-senses-desk:
 	@bash -c "source /opt/ros/jazzy/setup.bash && source install/setup.bash && source ~/vendor_ws/install/setup.bash && ros2 launch senses senses.launch.py enable_lidar:=false"
 
 launch:
-	@bash -c "$(VENV_ACTIVATE) && source install/setup.bash && source ~/vendor_ws/install/setup.bash && ros2 launch bringup all.launch.py $(ARGS)"
+	@flock -n -E 73 /tmp/robopi-bringup.lock bash -c "$(VENV_ACTIVATE) && source install/setup.bash && source ~/vendor_ws/install/setup.bash && ros2 launch bringup all.launch.py $(ARGS)" || { status=$$?; if [ $$status -eq 73 ]; then echo "RoboPi bringup is already running; stop it before launching another instance."; fi; exit $$status; }
 
 launch-navigation:
-	@bash -c "$(VENV_ACTIVATE) && source install/setup.bash && source ~/vendor_ws/install/setup.bash && ros2 launch bringup all.launch.py enable_navigation:=true $(ARGS)"
+	@flock -n -E 73 /tmp/robopi-bringup.lock bash -c "$(VENV_ACTIVATE) && source install/setup.bash && source ~/vendor_ws/install/setup.bash && ros2 launch bringup all.launch.py enable_navigation:=true $(ARGS)" || { status=$$?; if [ $$status -eq 73 ]; then echo "RoboPi bringup is already running; stop it before launching another instance."; fi; exit $$status; }
 
 launch-localized:
 	@test -f "$(MAP_DIR)/$(MAP_NAME).yaml" || (echo "Missing saved map: $(MAP_DIR)/$(MAP_NAME).yaml" && exit 1)
-	@bash -c "$(VENV_ACTIVATE) && source install/setup.bash && source ~/vendor_ws/install/setup.bash && ros2 launch bringup all.launch.py use_saved_map:=true enable_navigation:=true saved_map_file:=$(abspath $(MAP_DIR)/$(MAP_NAME).yaml) $(ARGS)"
+	@flock -n -E 73 /tmp/robopi-bringup.lock bash -c "$(VENV_ACTIVATE) && source install/setup.bash && source ~/vendor_ws/install/setup.bash && ros2 launch bringup all.launch.py use_saved_map:=true enable_navigation:=true saved_map_file:=$(abspath $(MAP_DIR)/$(MAP_NAME).yaml) $(ARGS)" || { status=$$?; if [ $$status -eq 73 ]; then echo "RoboPi bringup is already running; stop it before launching another instance."; fi; exit $$status; }
 
 save-map:
 	@mkdir -p $(MAP_DIR)
