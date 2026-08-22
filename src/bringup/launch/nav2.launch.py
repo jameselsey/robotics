@@ -26,6 +26,7 @@ def generate_launch_description():
                 "params_file": params_file,
                 "use_sim_time": use_sim_time,
                 "autostart": "true",
+                "use_respawn": "true",
             }.items(),
         ),
     ])

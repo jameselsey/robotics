@@ -1,5 +1,5 @@
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, TimerAction
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node
 from launch.conditions import IfCondition, UnlessCondition
@@ -10,6 +10,11 @@ from launch.substitutions import PathJoinSubstitution
 import os
 
 def generate_launch_description():
+    laser_x = LaunchConfiguration('laser_x')
+    laser_y = LaunchConfiguration('laser_y')
+    laser_z = LaunchConfiguration('laser_z')
+    laser_yaw = LaunchConfiguration('laser_yaw')
+
     # Get the path to the joystick launch file
     joystick_launch_path = os.path.join(
         get_package_share_directory('joystick'),
@@ -93,6 +98,22 @@ def generate_launch_description():
         executable='joint_state_publisher',
         name='joint_state_publisher'
     )
+    base_to_laser_tf = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        name='base_to_laser_tf',
+        arguments=[
+            '--x', laser_x,
+            '--y', laser_y,
+            '--z', laser_z,
+            '--roll', '0.0',
+            '--pitch', '0.0',
+            '--yaw', laser_yaw,
+            '--frame-id', 'base_link',
+            '--child-frame-id', 'laser',
+        ],
+        output='screen',
+    )
 
     senses_share_dir = get_package_share_directory('senses')
     eyes_launch_path = os.path.join(senses_share_dir, 'launch', 'senses.launch.py')
@@ -119,11 +140,24 @@ def generate_launch_description():
             default_value=os.path.expanduser('~/robotics/maps/house.yaml'),
             description='Occupancy-map YAML used when use_saved_map is true',
         ),
+        DeclareLaunchArgument('laser_x', default_value='0.0'),
+        DeclareLaunchArgument('laser_y', default_value='0.0'),
+        DeclareLaunchArgument('laser_z', default_value='0.16'),
+        DeclareLaunchArgument('laser_yaw', default_value='3.141592653589793'),
+        DeclareLaunchArgument(
+            'localization_pose_file',
+            default_value=os.path.expanduser('~/.ros/robopi/localization_pose.json'),
+            description='Runtime file used to restore the last AMCL pose',
+        ),
+        DeclareLaunchArgument('initial_pose_x', default_value='-0.819'),
+        DeclareLaunchArgument('initial_pose_y', default_value='0.823'),
+        DeclareLaunchArgument('initial_pose_yaw', default_value='1.221'),
         joystick_launch,
         foxglove_bridge_node,
         drive_controller_node,
         robot_description_node,
         joint_state_pub,
+        base_to_laser_tf,
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(eyes_launch_path)
         ),
@@ -136,10 +170,17 @@ def generate_launch_description():
             condition=IfCondition(LaunchConfiguration('use_saved_map')),
             launch_arguments={
                 'map': LaunchConfiguration('saved_map_file'),
+                'pose_file': LaunchConfiguration('localization_pose_file'),
+                'initial_pose_x': LaunchConfiguration('initial_pose_x'),
+                'initial_pose_y': LaunchConfiguration('initial_pose_y'),
+                'initial_pose_yaw': LaunchConfiguration('initial_pose_yaw'),
             }.items(),
         ),
-        IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(nav2_launch_path),
+        TimerAction(
+            period=8.0,
             condition=IfCondition(LaunchConfiguration('enable_navigation')),
+            actions=[IncludeLaunchDescription(
+                PythonLaunchDescriptionSource(nav2_launch_path),
+            )],
         ),
     ])
