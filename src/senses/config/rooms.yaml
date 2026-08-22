@@ -1,23 +1,59 @@
 frame_id: map
 base_frame: base_link
 rooms:
-  room 1:
+  bed 1:
+    # Reviewed free-space goal with approximately 0.47 m map clearance.
+    navigate_pose: {x: 2.453, y: -0.052, yaw: 0.0}
     polygon:
-    - - -2.272
-      - 1.272
-    - - -1.872
-      - 1.635
-    - - -1.547
-      - 1.397
-    - - -1.822
-      - 0.947
-  room 2:
+    - - 1.382
+      - -0.096
+    - - 1.564
+      - 0.594
+    - - 3.015
+      - 0.198
+    - - 2.862
+      - -0.568
+  bed 2:
+    # Reviewed free-space goal with approximately 0.46 m map clearance.
+    navigate_pose: {x: 2.053, y: -1.802, yaw: 0.0}
     polygon:
-    - - -2.097
-      - -0.641
-    - - -1.347
-      - -1.328
-    - - -0.61
-      - -0.728
-    - - -1.097
-      - 0.01
+    - - 0.621
+      - -1.199
+    - - 2.626
+      - -1.588
+    - - 2.343
+      - -2.29
+    - - 0.432
+      - -1.895
+  hallway:
+    # Reviewed free-space goal with approximately 0.50 m map clearance.
+    navigate_pose: {x: 2.253, y: -0.902, yaw: 0.0}
+    polygon:
+    - - 2.826
+      - -0.645
+    - - 0.957
+      - -0.161
+    - - 0.662
+      - -0.993
+    - - 2.608
+      - -1.488
+  lounge:
+    # Reviewed free-space goal with approximately 0.83 m map clearance.
+    navigate_pose: {x: -0.597, y: 0.248, yaw: 0.0}
+    polygon:
+    - - -1.071
+      - 1.142
+    - - 1.323
+      - 0.611
+    - - 1.158
+      - -0.144
+    - - 0.368
+      - -0.261
+    - - 0.09
+      - -0.503
+    - - -0.057
+      - -0.745
+    - - -0.387
+      - -0.539
+    - - -1.59
+      - -0.379

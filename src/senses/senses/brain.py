@@ -2,8 +2,10 @@ import os
 import time
 import threading
 import logging
+from pathlib import Path
 
 import rclpy
+from ament_index_python.packages import get_package_share_directory
 from rclpy.node import Node
 from std_msgs.msg import String
 
@@ -12,6 +14,7 @@ from strands.models import BedrockModel
 from strands_tools import calculator, current_time
 
 from senses.movement_tools import MovementController
+from senses.semantic_map_tools import SemanticMapController
 
 
 @tool
@@ -37,6 +40,14 @@ class Brain(Node):
         self.declare_parameter("bedrock_region", "ap-southeast-2")
         self.declare_parameter("bedrock_model_id", "apac.anthropic.claude-3-haiku-20240307-v1:0")
         self.declare_parameter("temperature", 0.3)
+        self.declare_parameter("rooms_config_path", "")
+
+        rooms_config_path = str(self.get_parameter("rooms_config_path").value).strip()
+        if not rooms_config_path:
+            rooms_config_path = str(
+                Path(get_package_share_directory("senses")) / "config" / "rooms.yaml"
+            )
+        self._semantic_map = SemanticMapController(self, rooms_config_path)
 
         region = os.environ.get("AWS_REGION") or str(self.get_parameter("bedrock_region").value)
         model_id = os.environ.get("BEDROCK_MODEL_ID") or str(self.get_parameter("bedrock_model_id").value)
@@ -50,6 +61,8 @@ class Brain(Node):
 
                For movement commands, humorously acknowledge the request, then execute. Choose safe default speeds and durations when the user speaks naturally instead of asking for units. Treat 'spin on the spot' as a one full 360 degree in-place rotation. Use distance-based tools for requests like 'Drive forward 1 meter.' Example: 'Drive forward 1 meter.' Response: 'Yes, master! Moving forward now...'
 
+               For room or location questions, use the semantic map tools rather than guessing. Use what_room_am_i_in for questions such as 'what room are you in?'. For navigation requests, first resolve the exact room and then call navigate_to_room. Never substitute a different room when a name is ambiguous. If Nav2 or localization is unavailable, explain that no movement occurred. Use cancel_navigation as well as stop_robot when asked to stop autonomous navigation.
+
                Keep things fun, light, and engaging.
                """
         )
@@ -61,7 +74,11 @@ class Brain(Node):
             pass
 
         self.bedrock_model = BedrockModel(model_id=model_id, region_name=region, temperature=temperature)
-        self._tools = [calculator, current_time, letter_counter] + self._movement.make_tools()
+        self._tools = (
+            [calculator, current_time, letter_counter]
+            + self._movement.make_tools()
+            + self._semantic_map.make_tools()
+        )
         self.get_logger().info(f"Using Bedrock region={region}, model_id={model_id}, temperature={temperature}")
         self._lock = threading.Lock()
 

@@ -12,6 +12,7 @@ from launch.substitutions import LaunchConfiguration
 def generate_launch_description():
     senses_share_dir = get_package_share_directory('senses')
     eyes_launch_path = os.path.join(senses_share_dir, 'launch', 'eyes.launch.py')
+    default_rooms_config = os.path.join(senses_share_dir, 'config', 'rooms.yaml')
 
     channel_type = LaunchConfiguration('channel_type', default='serial')
     serial_port = LaunchConfiguration('serial_port', default='/dev/ttyUSB0')
@@ -34,6 +35,11 @@ def generate_launch_description():
         DeclareLaunchArgument('vision_enabled', default_value='true'),
         DeclareLaunchArgument('vision_topic', default_value='/image_viz/compressed'),
         DeclareLaunchArgument('vision_model_id', default_value='amazon.nova-lite-v1:0'),
+        DeclareLaunchArgument(
+            'rooms_config_path',
+            default_value=default_rooms_config,
+            description='Semantic room polygons and reviewed navigation poses',
+        ),
         DeclareLaunchArgument('endpointing_sensitivity', default_value='LOW'),
         DeclareLaunchArgument('idle_timeout_seconds', default_value='45.0'),
         DeclareLaunchArgument('max_session_seconds', default_value='420.0'),
@@ -59,10 +65,20 @@ def generate_launch_description():
                 'vision_enabled': LaunchConfiguration('vision_enabled'),
                 'vision_topic': LaunchConfiguration('vision_topic'),
                 'vision_model_id': LaunchConfiguration('vision_model_id'),
+                'rooms_config_path': LaunchConfiguration('rooms_config_path'),
                 'endpointing_sensitivity': LaunchConfiguration('endpointing_sensitivity'),
                 'idle_timeout_seconds': LaunchConfiguration('idle_timeout_seconds'),
                 'max_session_seconds': LaunchConfiguration('max_session_seconds'),
             }]
+        ),
+        Node(
+            package='senses',
+            executable='room_markers',
+            name='room_marker_publisher',
+            output='screen',
+            parameters=[{
+                'rooms_config_path': LaunchConfiguration('rooms_config_path'),
+            }],
         ),
         DeclareLaunchArgument(
             'channel_type',

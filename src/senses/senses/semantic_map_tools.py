@@ -2,8 +2,11 @@
 
 import math
 from pathlib import Path
+import re
+
 import rclpy
 import yaml
+from action_msgs.msg import GoalStatus
 from geometry_msgs.msg import PoseStamped
 from rclpy.action import ActionClient
 from rclpy.duration import Duration
@@ -14,6 +17,60 @@ try:
     from nav2_msgs.action import NavigateToPose
 except Exception:  # pragma: no cover - nav2_msgs may be absent on development machines
     NavigateToPose = None
+
+
+_NUMBER_WORDS = {
+    "one": "1",
+    "two": "2",
+    "three": "3",
+    "four": "4",
+    "five": "5",
+    "six": "6",
+    "seven": "7",
+    "eight": "8",
+    "nine": "9",
+    "ten": "10",
+}
+
+_GOAL_STATUS_NAMES = {
+    GoalStatus.STATUS_UNKNOWN: "unknown",
+    GoalStatus.STATUS_ACCEPTED: "accepted",
+    GoalStatus.STATUS_EXECUTING: "navigating",
+    GoalStatus.STATUS_CANCELING: "canceling",
+    GoalStatus.STATUS_SUCCEEDED: "succeeded",
+    GoalStatus.STATUS_CANCELED: "canceled",
+    GoalStatus.STATUS_ABORTED: "aborted",
+}
+
+
+def _normalise_room_name(value: str) -> str:
+    """Normalize spoken and written room names for safe matching."""
+    words = re.sub(r"[^a-z0-9]+", " ", str(value).strip().lower()).split()
+    return " ".join(_NUMBER_WORDS.get(word, word) for word in words)
+
+
+def _resolve_room_name(room_names, requested: str) -> tuple[str | None, list[str]]:
+    """Return an exact or unique partial match plus any ambiguous candidates."""
+    normalized_request = _normalise_room_name(requested)
+    if not normalized_request:
+        return None, []
+
+    normalized = {
+        str(name): _normalise_room_name(str(name))
+        for name in room_names
+    }
+    exact = [name for name, value in normalized.items() if value == normalized_request]
+    if exact:
+        return exact[0], []
+
+    partial = [
+        name
+        for name, value in normalized.items()
+        if normalized_request in value or value in normalized_request
+    ]
+    if len(partial) == 1:
+        return partial[0], []
+    return None, sorted(partial)
 
 
 def _yaw_to_quaternion(yaw: float):
@@ -77,6 +134,9 @@ class SemanticMapController:
         self._tf_buffer = Buffer()
         self._tf_listener = TransformListener(self._tf_buffer, ros_node)
         self._nav_client = None
+        self._goal_handle = None
+        self._navigation_room = None
+        self._navigation_status = "idle"
         if NavigateToPose is not None:
             self._nav_client = ActionClient(ros_node, NavigateToPose, "navigate_to_pose")
         self._load_config()
@@ -120,16 +180,15 @@ class SemanticMapController:
                 return str(name)
         return None
 
-    def _room_key(self, room_name: str) -> str | None:
-        requested = room_name.strip().lower()
+    def _resolve_room_key(self, room_name: str) -> tuple[str | None, str | None]:
         rooms = self._config.get("rooms") or {}
-        for name in rooms:
-            if str(name).lower() == requested:
-                return str(name)
-        for name in rooms:
-            if requested and requested in str(name).lower():
-                return str(name)
-        return None
+        key, ambiguous = _resolve_room_name(rooms.keys(), room_name)
+        if key is not None:
+            return key, None
+        if ambiguous:
+            choices = ", ".join(ambiguous)
+            return None, f"Room name '{room_name}' is ambiguous; choose one of: {choices}."
+        return None, f"Unknown room '{room_name}'. Try list_known_rooms first."
 
     def _room_goal(self, room_name: str, room: dict) -> tuple[float, float, float, str]:
         pose = room.get("navigate_pose") or {}
@@ -158,6 +217,52 @@ class SemanticMapController:
         except ValueError:
             parts.append("no navigation goal")
         return "; ".join(parts)
+
+    def _handle_goal_response(self, future) -> None:
+        try:
+            handle = future.result()
+            if not handle.accepted:
+                self._navigation_status = "rejected"
+                self._node.get_logger().warn(
+                    f"Nav2 rejected room goal for {self._navigation_room}"
+                )
+                return
+            self._goal_handle = handle
+            self._navigation_status = "navigating"
+            self._node.get_logger().info(
+                f"Nav2 accepted room goal for {self._navigation_room}"
+            )
+            handle.get_result_async().add_done_callback(self._handle_navigation_result)
+        except Exception as exc:
+            self._navigation_status = f"goal response error: {exc}"
+            self._node.get_logger().warn(self._navigation_status)
+
+    def _handle_navigation_result(self, future) -> None:
+        try:
+            wrapped_result = future.result()
+            self._navigation_status = _GOAL_STATUS_NAMES.get(
+                wrapped_result.status,
+                f"status {wrapped_result.status}",
+            )
+            self._node.get_logger().info(
+                f"Navigation to {self._navigation_room}: {self._navigation_status}"
+            )
+        except Exception as exc:
+            self._navigation_status = f"result error: {exc}"
+            self._node.get_logger().warn(self._navigation_status)
+        finally:
+            self._goal_handle = None
+
+    def _navigation_summary(self) -> str:
+        server_ready = (
+            self._nav_client is not None
+            and self._nav_client.wait_for_server(timeout_sec=0.2)
+        )
+        room = self._navigation_room or "none"
+        return (
+            f"Nav2 server: {'ready' if server_ready else 'not running'}; "
+            f"navigation status: {self._navigation_status}; target room: {room}."
+        )
 
     def make_tools(self) -> list:
         ctrl = self
@@ -204,9 +309,9 @@ class SemanticMapController:
         def get_room_details(room_name: str) -> str:
             """Return details about one annotated room by name."""
             rooms = ctrl._config.get("rooms") or {}
-            key = ctrl._room_key(room_name)
-            if key is None:
-                return f"ERROR: Unknown room '{room_name}'. Try list_known_rooms first."
+            key, error = ctrl._resolve_room_key(room_name)
+            if error:
+                return f"ERROR: {error}"
             return ctrl._room_summary(key, rooms[key] or {})
 
         @tool
@@ -223,20 +328,43 @@ class SemanticMapController:
 
         @tool
         def navigate_to_room(room_name: str) -> str:
-            """Send a Nav2 NavigateToPose goal for a labelled room. Uses navigate_pose, or the room polygon centroid if no pose is set."""
+            """Navigate safely to a labelled room's reviewed navigate_pose using Nav2."""
             rooms = ctrl._config.get("rooms") or {}
-            key = ctrl._room_key(room_name)
-            if key is None:
-                return f"ERROR: Unknown room '{room_name}'. Try list_known_rooms first."
+            key, error = ctrl._resolve_room_key(room_name)
+            if error:
+                return f"ERROR: {error}"
             room = rooms[key] or {}
             try:
                 x, y, yaw, source = ctrl._room_goal(key, room)
             except ValueError as exc:
                 return f"ERROR: {exc}"
+            if source != "navigate_pose":
+                return (
+                    f"ERROR: Room '{key}' has no reviewed navigate_pose. "
+                    "A polygon centre is useful for labels but is not automatically safe to drive to."
+                )
             if ctrl._nav_client is None:
                 return "ERROR: nav2_msgs is not installed, so I cannot send Nav2 goals."
             if not ctrl._nav_client.wait_for_server(timeout_sec=2.0):
-                return "ERROR: Nav2 navigate_to_pose action server is not running yet."
+                return (
+                    "ERROR: Nav2 navigate_to_pose action server is not running. "
+                    "Start the navigation stack before requesting autonomous movement."
+                )
+            try:
+                current_x, current_y = ctrl._current_pose_xy()
+            except RuntimeError as exc:
+                return f"ERROR: Cannot navigate without localization: {exc}"
+            if ctrl._find_room(current_x, current_y) == key:
+                return f"Already in {key}; no navigation goal was sent."
+            if ctrl._goal_handle is not None or ctrl._navigation_status in {
+                "requesting",
+                "navigating",
+                "canceling",
+            }:
+                return (
+                    f"ERROR: Navigation is already {ctrl._navigation_status} toward "
+                    f"{ctrl._navigation_room}. Cancel it before sending another goal."
+                )
 
             goal = NavigateToPose.Goal()
             goal.pose = PoseStamped()
@@ -248,23 +376,30 @@ class SemanticMapController:
             goal.pose.pose.orientation.z = qz
             goal.pose.pose.orientation.w = qw
 
+            ctrl._navigation_room = key
+            ctrl._navigation_status = "requesting"
             future = ctrl._nav_client.send_goal_async(goal)
-
-            def log_goal_response(done_future):
-                try:
-                    handle = done_future.result()
-                    if handle.accepted:
-                        ctrl._node.get_logger().info(f"Nav2 accepted room goal for {key}")
-                    else:
-                        ctrl._node.get_logger().warn(f"Nav2 rejected room goal for {key}")
-                except Exception as exc:
-                    ctrl._node.get_logger().warn(f"Nav2 goal response failed for {key}: {exc}")
-
-            future.add_done_callback(log_goal_response)
+            future.add_done_callback(ctrl._handle_goal_response)
             return (
-                f"Sent Nav2 goal for {key} using {source}: "
+                f"Requested Nav2 navigation to {key} using its reviewed {source}: "
                 f"x={x:.2f}, y={y:.2f}, yaw={yaw:.2f}."
             )
+
+        @tool
+        def get_navigation_status() -> str:
+            """Report whether Nav2 is ready and the state of the current room goal."""
+            return ctrl._navigation_summary()
+
+        @tool
+        def cancel_navigation() -> str:
+            """Cancel the active Nav2 room-navigation goal immediately."""
+            if ctrl._goal_handle is None:
+                if ctrl._navigation_status == "requesting":
+                    return "Navigation goal is still being requested; ask again in a moment."
+                return "No accepted Nav2 navigation goal is active."
+            ctrl._navigation_status = "canceling"
+            ctrl._goal_handle.cancel_goal_async()
+            return f"Canceling navigation to {ctrl._navigation_room}."
 
         return [
             reload_room_labels,
@@ -274,4 +409,6 @@ class SemanticMapController:
             describe_room_annotations,
             get_room_details,
             navigate_to_room,
+            get_navigation_status,
+            cancel_navigation,
         ]
