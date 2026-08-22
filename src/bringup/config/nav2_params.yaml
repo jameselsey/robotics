@@ -196,7 +196,9 @@ local_costmap:
       width: 3
       height: 3
       resolution: 0.05
-      robot_radius: 0.22
+      # Match the 0.30 x 0.28 m tracked footprint from the robot model. A
+      # circular 0.22 m radius made traversable doorways appear closed.
+      footprint: "[[0.15, 0.14], [0.15, -0.14], [-0.15, -0.14], [-0.15, 0.14]]"
       plugins: ["voxel_layer", "inflation_layer"]
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
@@ -234,24 +236,13 @@ global_costmap:
       publish_frequency: 1.0
       global_frame: map
       robot_base_frame: base_link
-      robot_radius: 0.22
+      footprint: "[[0.15, 0.14], [0.15, -0.14], [-0.15, -0.14], [-0.15, 0.14]]"
       resolution: 0.05
       track_unknown_space: true
-      plugins: ["static_layer", "obstacle_layer", "inflation_layer"]
-      obstacle_layer:
-        plugin: "nav2_costmap_2d::ObstacleLayer"
-        enabled: True
-        observation_sources: scan
-        scan:
-          topic: /scan
-          max_obstacle_height: 2.0
-          clearing: True
-          marking: True
-          data_type: "LaserScan"
-          raytrace_max_range: 3.0
-          raytrace_min_range: 0.0
-          obstacle_max_range: 2.5
-          obstacle_min_range: 0.0
+      # Plan through the stable saved map. The live scan is intentionally kept
+      # in the local costmap only: small AMCL/scan offsets otherwise thicken
+      # mapped walls and can seal narrow doorways in the global costmap.
+      plugins: ["static_layer", "inflation_layer"]
       static_layer:
         plugin: "nav2_costmap_2d::StaticLayer"
         map_subscribe_transient_local: True
