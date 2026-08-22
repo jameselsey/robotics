@@ -3,9 +3,9 @@
 <package format="3">
   <name>senses</name>
   <version>0.0.1</version>
-  <description>TODO: Package description</description>
-  <maintainer email="james.elsey@gmail.com">jelsey</maintainer>
-  <license>TODO: License declaration</license>
+  <description>Sensory, voice-agent, vision, and semantic navigation nodes for RoboPi</description>
+  <maintainer email="james.elsey@gmail.com">James Elsey</maintainer>
+  <license>MIT</license>
 
   <depend>rclpy</depend>
 
@@ -15,6 +15,7 @@
   <exec_depend>nav2_msgs</exec_depend>
   <exec_depend>geometry_msgs</exec_depend>
   <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
   <exec_depend>visualization_msgs</exec_depend>
 
   <exec_depend>python3-numpy</exec_depend>
@@ -28,12 +29,10 @@
   <exec_depend>python3-sounddevice-pip</exec_depend>
   <exec_depend>openwakeword-pip</exec_depend>
   <exec_depend>strands-agents</exec_depend>
-  <exec_depend>aws-sdk-bedrock-runtime-pip</exec_depend>
   <exec_depend>strands-agents-tools</exec_depend>
+  <exec_depend>python3-boto3</exec_depend>
+  <!-- aws-sdk-bedrock-runtime is installed from requirements.txt; it has no rosdep key. -->
 
-  <test_depend>ament_copyright</test_depend>
-  <test_depend>ament_flake8</test_depend>
-  <test_depend>ament_pep257</test_depend>
   <test_depend>python3-pytest</test_depend>
 
   <test_depend>python-gc9d01-library-pip</test_depend>

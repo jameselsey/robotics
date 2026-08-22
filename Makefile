@@ -1,4 +1,4 @@
-.PHONY: clean build launch-joystick launch-senses launch-senses-desk venv rviz build-rviz save-map publish-room-markers
+.PHONY: clean build test launch-joystick launch-senses launch-senses-desk venv rviz build-rviz save-map publish-room-markers
 
 # Virtual environment setup
 VENV_DIR = ros_venv
@@ -45,6 +45,9 @@ install-oww:
 	@echo "📦 Installing openWakeWord in venv..."
 	$(VENV_PIP) install -U --no-deps "openwakeword>=0.6.0"
 	$(VENV_PIP) install -U onnxruntime numpy
+
+test:
+	@bash -c "source /opt/ros/jazzy/setup.bash && source $(VENV_DIR)/bin/activate && source install/setup.bash && colcon test --event-handlers console_direct+ && colcon test-result --verbose"
 
 build: 
 	# we have to compile the urdf file from the xacro, because urdf is what foxglove requires

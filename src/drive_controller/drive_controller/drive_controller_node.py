@@ -1,5 +1,4 @@
 import json
-import math
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import Twist, TransformStamped
@@ -9,6 +8,14 @@ import tf_transformations
 import tf2_ros
 
 from gpiozero import DigitalOutputDevice, PWMOutputDevice, RotaryEncoder
+
+from drive_controller.kinematics import (
+    Pose2D,
+    encoder_delta_metres,
+    integrate_differential_drive,
+    metres_per_tick,
+)
+
 
 class DriveController(Node):
     def __init__(self):
@@ -94,7 +101,7 @@ class DriveController(Node):
         self.counts_per_rev = float(p('counts_per_rev').value)
         self.left_distance_scale = float(p('left_distance_scale').value)
         self.right_distance_scale = float(p('right_distance_scale').value)
-        self.m_per_tick = (2.0 * math.pi * self.wheel_radius) / self.counts_per_rev
+        self.m_per_tick = metres_per_tick(self.wheel_radius, self.counts_per_rev)
 
         la, lb = p('left_enc_a').value, p('left_enc_b').value
         ra, rb = p('right_enc_a').value, p('right_enc_b').value
@@ -197,15 +204,13 @@ class DriveController(Node):
         d_left = 0.0; d_right = 0.0
         if left_steps is not None:
             dl = left_steps - self.last_left_steps
-            if self.left_invert: dl = -dl
             self.left_distance_scale = float(self.get_parameter('left_distance_scale').value)
-            d_left = dl * self.m_per_tick * self.left_distance_scale
+            d_left = encoder_delta_metres(dl, self.m_per_tick, self.left_distance_scale, self.left_invert)
             self.last_left_steps = left_steps
         if right_steps is not None:
             dr = right_steps - self.last_right_steps
-            if self.right_invert: dr = -dr
             self.right_distance_scale = float(self.get_parameter('right_distance_scale').value)
-            d_right = dr * self.m_per_tick * self.right_distance_scale
+            d_right = encoder_delta_metres(dr, self.m_per_tick, self.right_distance_scale, self.right_invert)
             self.last_right_steps = right_steps
 
         if (self.left_enc is None) and (self.right_enc is None):
@@ -218,12 +223,15 @@ class DriveController(Node):
         elif (self.right_enc is None) and (self.left_enc is not None):
             d_right = d_left
 
-        d_center = 0.5 * (d_left + d_right)
-        d_theta = (d_right - d_left) / self.wheel_base if self.wheel_base != 0 else 0.0
-
-        self.theta = math.atan2(math.sin(self.theta + d_theta), math.cos(self.theta + d_theta))
-        self.x += d_center * math.cos(self.theta)
-        self.y += d_center * math.sin(self.theta)
+        pose, d_center, d_theta = integrate_differential_drive(
+            Pose2D(self.x, self.y, self.theta),
+            d_left,
+            d_right,
+            self.wheel_base,
+        )
+        self.x = pose.x
+        self.y = pose.y
+        self.theta = pose.theta
 
         v_meas = d_center / dt
         w_meas = d_theta / dt
@@ -251,8 +259,18 @@ class DriveController(Node):
 
         left_ticks_per_sec = None if left_delta is None else left_delta / dt
         right_ticks_per_sec = None if right_delta is None else right_delta / dt
-        left_mps = None if left_ticks_per_sec is None else left_ticks_per_sec * self.m_per_tick * self.left_distance_scale
-        right_mps = None if right_ticks_per_sec is None else right_ticks_per_sec * self.m_per_tick * self.right_distance_scale
+        left_mps = None if left_delta is None else encoder_delta_metres(
+            left_delta,
+            self.m_per_tick,
+            self.left_distance_scale,
+            self.left_invert,
+        ) / dt
+        right_mps = None if right_delta is None else encoder_delta_metres(
+            right_delta,
+            self.m_per_tick,
+            self.right_distance_scale,
+            self.right_invert,
+        ) / dt
 
         warnings = []
         if abs(self.current_pwm_left) > self.encoder_command_deadband:
