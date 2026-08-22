@@ -114,6 +114,8 @@ def generate_launch_description():
             package='sllidar_ros2',
             executable='sllidar_node',
             name='sllidar_node',
+            respawn=True,
+            respawn_delay=2.0,
             condition=IfCondition(LaunchConfiguration('enable_lidar')),
             parameters=[{'channel_type': channel_type,
                          'serial_port': serial_port,

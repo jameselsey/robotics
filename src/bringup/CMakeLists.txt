@@ -17,7 +17,9 @@ install(
 )
 
 install(
-  PROGRAMS scripts/localization_pose_manager.py
+  PROGRAMS
+    scripts/foxglove_health_monitor.py
+    scripts/localization_pose_manager.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

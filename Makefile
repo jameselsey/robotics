@@ -1,4 +1,4 @@
-.PHONY: clean build test launch launch-navigation launch-localized launch-joystick launch-senses launch-senses-desk venv rviz build-rviz save-map publish-room-markers
+.PHONY: clean build test health launch launch-navigation launch-localized launch-joystick launch-senses launch-senses-desk venv rviz build-rviz save-map publish-room-markers
 
 # Virtual environment setup
 VENV_DIR = ros_venv
@@ -48,6 +48,9 @@ install-oww:
 
 test:
 	@bash -c "source /opt/ros/jazzy/setup.bash && source $(VENV_DIR)/bin/activate && source install/setup.bash && colcon test --event-handlers console_direct+ && colcon test-result --verbose"
+
+health:
+	@bash -c "source /opt/ros/jazzy/setup.bash && source install/setup.bash && timeout 8 ros2 topic echo /foxglove_health --once --full-length"
 
 build: 
 	# we have to compile the urdf file from the xacro, because urdf is what foxglove requires

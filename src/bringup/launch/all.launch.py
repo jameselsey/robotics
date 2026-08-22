@@ -33,10 +33,15 @@ def generate_launch_description():
         executable='foxglove_bridge',
         name='foxglove_bridge',
         output='screen',
+        respawn=True,
+        respawn_delay=2.0,
         parameters=[{
             'port': 8765,
             'use_compression': True,
-            'max_qos_depth': 1,
+            # Keep enough TF history to transform delayed 10 Hz scans against
+            # the roughly 60 Hz transform stream. A depth of 1 made Foxglove
+            # intermittently lose the robot and scan after reconnecting.
+            'max_qos_depth': 100,
             'send_buffer_limit_bytes':67108864,
             # Expose only these topics to Foxglove (ECMAScript regex)
             "topic_whitelist": [
@@ -62,6 +67,8 @@ def generate_launch_description():
                 r"^(.*/)?tf$",
                 r"^(.*/)?tf_static$",
                 r"^(.*/)?visualization_marker_array$",
+                r"^(.*/)?diagnostics$",
+                r"^(.*/)?foxglove_health$",
             ],
         }]
     )
@@ -89,6 +96,8 @@ def generate_launch_description():
         package='robot_state_publisher',
         executable='robot_state_publisher',
         name='robot_state_publisher',
+        respawn=True,
+        respawn_delay=2.0,
         parameters=[{
             'robot_description': open(urdf_path).read()
         }]
@@ -102,6 +111,8 @@ def generate_launch_description():
         package='tf2_ros',
         executable='static_transform_publisher',
         name='base_to_laser_tf',
+        respawn=True,
+        respawn_delay=2.0,
         arguments=[
             '--x', laser_x,
             '--y', laser_y,
@@ -113,6 +124,14 @@ def generate_launch_description():
             '--child-frame-id', 'laser',
         ],
         output='screen',
+    )
+    foxglove_health_node = Node(
+        package='bringup',
+        executable='foxglove_health_monitor.py',
+        name='foxglove_health_monitor',
+        output='screen',
+        respawn=True,
+        respawn_delay=2.0,
     )
 
     senses_share_dir = get_package_share_directory('senses')
@@ -158,6 +177,7 @@ def generate_launch_description():
         robot_description_node,
         joint_state_pub,
         base_to_laser_tf,
+        foxglove_health_node,
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(eyes_launch_path)
         ),
