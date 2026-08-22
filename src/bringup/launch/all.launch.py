@@ -2,7 +2,7 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch_ros.actions import Node
-from launch.conditions import IfCondition
+from launch.conditions import IfCondition, UnlessCondition
 from ament_index_python.packages import get_package_share_directory
 from launch.substitutions import Command, LaunchConfiguration
 from launch_ros.substitutions import FindPackageShare
@@ -40,6 +40,11 @@ def generate_launch_description():
                 r"^(.*/)?image_viz/compressed$",
                 r"^(.*/)?joint_states$",
                 r"^(.*/)?goal_pose$",
+                r"^(.*/)?amcl_pose$",
+                r"^(.*/)?particle_cloud$",
+                r"^(.*/)?plan$",
+                r"^(.*/)?local_costmap/.*$",
+                r"^(.*/)?global_costmap/.*$",
                 r"^(.*/)?slam_toolbox/.*$",
                 r"^(.*/)?map_metadata$",
                 r"^(.*/)?map$",
@@ -94,12 +99,25 @@ def generate_launch_description():
     bringup_share_dir = get_package_share_directory('bringup')
     slam_launch_path = os.path.join(bringup_share_dir, 'launch', 'slam.launch.py')
     nav2_launch_path = os.path.join(bringup_share_dir, 'launch', 'nav2.launch.py')
+    localization_launch_path = os.path.join(
+        bringup_share_dir, 'launch', 'localization.launch.py'
+    )
 
     return LaunchDescription([
         DeclareLaunchArgument(
             'enable_navigation',
             default_value='false',
             description='Start Nav2 navigation servers as part of all.launch.py',
+        ),
+        DeclareLaunchArgument(
+            'use_saved_map',
+            default_value='false',
+            description='Use map-server and AMCL instead of online SLAM mapping',
+        ),
+        DeclareLaunchArgument(
+            'saved_map_file',
+            default_value=os.path.expanduser('~/robotics/maps/house.yaml'),
+            description='Occupancy-map YAML used when use_saved_map is true',
         ),
         joystick_launch,
         foxglove_bridge_node,
@@ -110,7 +128,15 @@ def generate_launch_description():
             PythonLaunchDescriptionSource(eyes_launch_path)
         ),
         IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(slam_launch_path)
+            PythonLaunchDescriptionSource(slam_launch_path),
+            condition=UnlessCondition(LaunchConfiguration('use_saved_map')),
+        ),
+        IncludeLaunchDescription(
+            PythonLaunchDescriptionSource(localization_launch_path),
+            condition=IfCondition(LaunchConfiguration('use_saved_map')),
+            launch_arguments={
+                'map': LaunchConfiguration('saved_map_file'),
+            }.items(),
         ),
         IncludeLaunchDescription(
             PythonLaunchDescriptionSource(nav2_launch_path),

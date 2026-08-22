@@ -1,4 +1,4 @@
-.PHONY: clean build test launch-joystick launch-senses launch-senses-desk venv rviz build-rviz save-map publish-room-markers
+.PHONY: clean build test launch launch-navigation launch-localized launch-joystick launch-senses launch-senses-desk venv rviz build-rviz save-map publish-room-markers
 
 # Virtual environment setup
 VENV_DIR = ros_venv
@@ -71,6 +71,13 @@ launch-senses-desk:
 
 launch:
 	@bash -c "$(VENV_ACTIVATE) && source install/setup.bash && source ~/vendor_ws/install/setup.bash && ros2 launch bringup all.launch.py $(ARGS)"
+
+launch-navigation:
+	@bash -c "$(VENV_ACTIVATE) && source install/setup.bash && source ~/vendor_ws/install/setup.bash && ros2 launch bringup all.launch.py enable_navigation:=true $(ARGS)"
+
+launch-localized:
+	@test -f "$(MAP_DIR)/$(MAP_NAME).yaml" || (echo "Missing saved map: $(MAP_DIR)/$(MAP_NAME).yaml" && exit 1)
+	@bash -c "$(VENV_ACTIVATE) && source install/setup.bash && source ~/vendor_ws/install/setup.bash && ros2 launch bringup all.launch.py use_saved_map:=true enable_navigation:=true saved_map_file:=$(abspath $(MAP_DIR)/$(MAP_NAME).yaml) $(ARGS)"
 
 save-map:
 	@mkdir -p $(MAP_DIR)
