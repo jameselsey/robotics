@@ -13,10 +13,14 @@ from strands import tool
 MAX_LINEAR_SPEED_MS = 0.5
 MAX_ANGULAR_SPEED_RADS = 2.0
 MAX_DURATION_S = 15.0
+MAX_DISTANCE_M = 3.0
+DISTANCE_MONITOR_HZ = 20.0
+DISTANCE_TOLERANCE_M = 0.03
 MAX_SPIN_DURATION_S = 30.0
 SPIN_MONITOR_HZ = 20.0
 SPIN_TOLERANCE_DEG = 8.0
 DEFAULT_LINEAR_SPEED_MS = 0.25
+DEFAULT_DISTANCE_SPEED_MS = 0.18
 DEFAULT_TURN_ANGULAR_SPEED_RADS = 0.5
 DEFAULT_SPIN_ANGULAR_SPEED_RADS = 0.35
 DEFAULT_TURN_DURATION_S = 1.5
@@ -50,6 +54,20 @@ def _validate_linear(speed_ms: float, duration_s: float):
         duration_s = MAX_DURATION_S
     return speed_ms, duration_s, warnings
 
+
+def _validate_distance(distance_m: float, speed_ms: float):
+    if distance_m <= 0.0:
+        raise ValueError("distance_m must be > 0.0")
+    if speed_ms <= 0.0:
+        raise ValueError("speed_ms must be > 0.0")
+    warnings = []
+    if distance_m > MAX_DISTANCE_M:
+        warnings.append(f"distance clamped from {distance_m:.2f} to {MAX_DISTANCE_M} m")
+        distance_m = MAX_DISTANCE_M
+    if speed_ms > MAX_LINEAR_SPEED_MS:
+        warnings.append(f"speed clamped from {speed_ms:.3f} to {MAX_LINEAR_SPEED_MS} m/s")
+        speed_ms = MAX_LINEAR_SPEED_MS
+    return distance_m, speed_ms, warnings
 
 def _validate_angular(angular_speed_rads: float, duration_s: float):
     if angular_speed_rads <= 0.0:
@@ -97,6 +115,35 @@ class MovementController:
         self.publish_twist(linear_x, angular_z)
         self._stop_event.wait(timeout=duration_s)
         self.publish_twist(0.0, 0.0)
+
+    def drive_distance(self, linear_x: float, distance_m: float, timeout_s: float) -> tuple[bool, float, float]:
+        self._stop_event.clear()
+        snap = self._odom_cache
+        if snap is None:
+            self.timed_move(linear_x, 0.0, timeout_s)
+            return False, 0.0, timeout_s
+
+        start_x = snap.x
+        start_y = snap.y
+        started_at = time.monotonic()
+        deadline = started_at + timeout_s
+        period_s = 1.0 / DISTANCE_MONITOR_HZ
+
+        self.publish_twist(linear_x, 0.0)
+        while not self._stop_event.is_set() and time.monotonic() < deadline:
+            self._stop_event.wait(timeout=period_s)
+            latest = self._odom_cache
+            if latest is None:
+                continue
+            travelled = math.hypot(latest.x - start_x, latest.y - start_y)
+            if travelled >= max(0.0, distance_m - DISTANCE_TOLERANCE_M):
+                self.publish_twist(0.0, 0.0)
+                return True, travelled, time.monotonic() - started_at
+
+        self.publish_twist(0.0, 0.0)
+        latest = self._odom_cache
+        travelled = 0.0 if latest is None else math.hypot(latest.x - start_x, latest.y - start_y)
+        return False, travelled, time.monotonic() - started_at
 
     def spin_by_degrees(self, angular_z: float, degrees: float, timeout_s: float) -> tuple[bool, float, float]:
         self._stop_event.clear()
@@ -154,6 +201,44 @@ class MovementController:
                 return f"ERROR: {e}"
             ctrl.timed_move(-speed, 0.0, duration)
             msg = f"Moving backward at {speed} m/s for {duration} s"
+            if warnings:
+                msg += " [WARNING: " + "; ".join(warnings) + "]"
+            return msg
+
+        @tool
+        def drive_forward_distance(distance_m: float = 1.0, speed_ms: float = DEFAULT_DISTANCE_SPEED_MS) -> str:
+            """Drive forward by a measured distance in metres using odometry. Use this when the user asks to drive forward a distance such as 1 metre."""
+            try:
+                distance, speed, warnings = _validate_distance(distance_m, speed_ms)
+            except ValueError as e:
+                return f"ERROR: {e}"
+            timeout_s = min(MAX_DURATION_S, max(distance / speed * 2.0, distance / speed + 3.0))
+            completed, actual_distance, elapsed_s = ctrl.drive_distance(speed, distance, timeout_s)
+            if completed:
+                msg = f"Drove forward {actual_distance:.2f} m in {elapsed_s:.2f} s"
+            elif ctrl._odom_cache is None:
+                msg = f"Drove forward using timed fallback for {elapsed_s:.2f} s; odometry was not available"
+            else:
+                msg = f"Forward drive timed out after {elapsed_s:.2f} s at about {actual_distance:.2f} m; distance calibration needs attention"
+            if warnings:
+                msg += " [WARNING: " + "; ".join(warnings) + "]"
+            return msg
+
+        @tool
+        def drive_backward_distance(distance_m: float = 1.0, speed_ms: float = DEFAULT_DISTANCE_SPEED_MS) -> str:
+            """Drive backward by a measured distance in metres using odometry. Use this when the user asks to reverse a distance such as 1 metre."""
+            try:
+                distance, speed, warnings = _validate_distance(distance_m, speed_ms)
+            except ValueError as e:
+                return f"ERROR: {e}"
+            timeout_s = min(MAX_DURATION_S, max(distance / speed * 2.0, distance / speed + 3.0))
+            completed, actual_distance, elapsed_s = ctrl.drive_distance(-speed, distance, timeout_s)
+            if completed:
+                msg = f"Drove backward {actual_distance:.2f} m in {elapsed_s:.2f} s"
+            elif ctrl._odom_cache is None:
+                msg = f"Drove backward using timed fallback for {elapsed_s:.2f} s; odometry was not available"
+            else:
+                msg = f"Backward drive timed out after {elapsed_s:.2f} s at about {actual_distance:.2f} m; distance calibration needs attention"
             if warnings:
                 msg += " [WARNING: " + "; ".join(warnings) + "]"
             return msg
@@ -233,4 +318,4 @@ class MovementController:
                 f"linear_vel={snap.linear_vel:.3f} m/s, angular_vel={snap.angular_vel:.3f} rad/s"
             )
 
-        return [move_forward, move_backward, spin_on_the_spot, turn_left, turn_right, stop_robot, get_odometry]
+        return [move_forward, move_backward, drive_forward_distance, drive_backward_distance, spin_on_the_spot, turn_left, turn_right, stop_robot, get_odometry]
