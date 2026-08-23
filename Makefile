@@ -1,4 +1,4 @@
-.PHONY: clean build test health launch launch-navigation launch-localized launch-joystick launch-senses launch-senses-desk venv rviz build-rviz save-map publish-room-markers navigation-log
+.PHONY: clean build test health launch launch-navigation launch-localized launch-joystick launch-senses launch-senses-desk venv rviz build-rviz save-map publish-room-markers navigation-log calibrate-angular
 
 # Virtual environment setup
 VENV_DIR = ros_venv
@@ -94,6 +94,9 @@ navigation-log:
 	@mkdir -p ~/.ros/robopi
 	@touch ~/.ros/robopi/navigation_events.jsonl
 	@tail -n 100 -f ~/.ros/robopi/navigation_events.jsonl
+
+calibrate-angular:
+	@bash -c "source /opt/ros/jazzy/setup.bash && source install/setup.bash && ros2 run drive_controller calibrate_angular --config src/drive_controller/config/drive_controller.yaml"
 
 docker:
 	# You may need to do these first, if it complains about permissions errors

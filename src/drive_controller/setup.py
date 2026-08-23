@@ -23,7 +23,8 @@ setup(
     license='MIT',
     entry_points={
         'console_scripts': [
-            'drive_controller = drive_controller.drive_controller_node:main'
+            'drive_controller = drive_controller.drive_controller_node:main',
+            'calibrate_angular = drive_controller.angular_calibration:main',
         ],
     },
 )

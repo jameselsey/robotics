@@ -22,6 +22,26 @@ def metres_per_tick(wheel_radius_m: float, counts_per_rev: float) -> float:
     return (2.0 * math.pi * wheel_radius_m) / counts_per_rev
 
 
+def shortest_angular_delta(current: float, previous: float) -> float:
+    """Return the signed change between wrapped angles."""
+    return math.atan2(math.sin(current - previous), math.cos(current - previous))
+
+
+def calibrated_wheel_base(
+    current_wheel_base_m: float,
+    reported_rotation_rad: float,
+    physical_rotation_rad: float = 2.0 * math.pi,
+) -> float:
+    """Calculate effective wheel separation from a measured physical rotation."""
+    if current_wheel_base_m <= 0.0:
+        raise ValueError("current_wheel_base_m must be > 0")
+    if abs(reported_rotation_rad) <= 0.0:
+        raise ValueError("reported_rotation_rad must be non-zero")
+    if abs(physical_rotation_rad) <= 0.0:
+        raise ValueError("physical_rotation_rad must be non-zero")
+    return current_wheel_base_m * abs(reported_rotation_rad / physical_rotation_rad)
+
+
 def encoder_delta_metres(
     delta_ticks: int,
     metres_per_encoder_tick: float,

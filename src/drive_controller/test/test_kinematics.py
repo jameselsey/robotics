@@ -6,9 +6,11 @@ import pytest
 
 from drive_controller.kinematics import (
     Pose2D,
+    calibrated_wheel_base,
     encoder_delta_metres,
     integrate_differential_drive,
     metres_per_tick,
+    shortest_angular_delta,
 )
 
 
@@ -67,6 +69,25 @@ def test_heading_is_normalized_across_pi():
     )
     assert -math.pi <= pose.theta <= math.pi
     assert pose.theta < 0.0
+
+
+def test_shortest_angular_delta_unwraps_positive_pi_boundary():
+    delta = shortest_angular_delta(-math.pi + 0.1, math.pi - 0.1)
+    assert delta == pytest.approx(0.2)
+
+
+def test_calibrated_wheel_base_accounts_for_track_scrub():
+    recommended = calibrated_wheel_base(
+        current_wheel_base_m=0.19,
+        reported_rotation_rad=2.0 * math.pi * 1.25,
+    )
+    assert recommended == pytest.approx(0.2375)
+
+
+@pytest.mark.parametrize("reported", [0.0, -0.0])
+def test_calibrated_wheel_base_rejects_zero_rotation(reported):
+    with pytest.raises(ValueError):
+        calibrated_wheel_base(0.19, reported)
 
 
 @pytest.mark.parametrize(
