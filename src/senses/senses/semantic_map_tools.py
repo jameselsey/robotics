@@ -1,16 +1,19 @@
 """Semantic map tools for room labels and Nav2 goals."""
 
+import json
 import math
 from pathlib import Path
 import re
+import time
 
 import rclpy
 import yaml
 from action_msgs.msg import GoalStatus
-from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped
+from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped, Twist
 from nav_msgs.msg import Path as NavPath
 from rclpy.action import ActionClient
 from rclpy.duration import Duration
+from std_msgs.msg import String
 from strands import tool
 from tf2_ros import Buffer, TransformException, TransformListener
 
@@ -46,6 +49,17 @@ _GOAL_STATUS_NAMES = {
 
 MAX_NAVIGATION_POSITION_VARIANCE = 0.20
 MAX_NAVIGATION_YAW_VARIANCE = 0.25
+SPIN_ONLY_LINEAR_THRESHOLD = 0.03
+SPIN_ONLY_ANGULAR_THRESHOLD = 0.25
+MAX_SPIN_ONLY_SECONDS = 12.0
+
+
+def _is_spin_only_command(linear_x: float, angular_z: float) -> bool:
+    """Return whether a Nav2 command is rotating without meaningful translation."""
+    return (
+        abs(float(linear_x)) < SPIN_ONLY_LINEAR_THRESHOLD
+        and abs(float(angular_z)) >= SPIN_ONLY_ANGULAR_THRESHOLD
+    )
 
 
 def _localization_confidence_error(covariance) -> str | None:
@@ -186,13 +200,22 @@ class SemanticMapController:
         self._planning_room = None
         self._planning_status = "idle"
         self._localization_covariance = None
+        self._spin_only_started_at = None
+        self._last_feedback_log_at = 0.0
+        self._navigation_log_path = (
+            Path.home() / ".ros" / "robopi" / "navigation_events.jsonl"
+        )
         self._plan_publisher = ros_node.create_publisher(NavPath, "/plan", 10)
+        self._diagnostics_publisher = ros_node.create_publisher(
+            String, "/navigation_diagnostics", 10
+        )
         ros_node.create_subscription(
             PoseWithCovarianceStamped,
             "/amcl_pose",
             self._amcl_pose_callback,
             10,
         )
+        ros_node.create_subscription(Twist, "/cmd_vel_nav", self._nav_cmd_callback, 10)
         if NavigateToPose is not None:
             self._nav_client = ActionClient(ros_node, NavigateToPose, "navigate_to_pose")
         if ComputePathToPose is not None:
@@ -203,6 +226,77 @@ class SemanticMapController:
 
     def _amcl_pose_callback(self, message) -> None:
         self._localization_covariance = list(message.pose.covariance)
+
+    def _publish_navigation_event(self, event: str, **details) -> None:
+        payload = {
+            "event": event,
+            "room": self._navigation_room,
+            "status": self._navigation_status,
+            "ros_time_ns": self._node.get_clock().now().nanoseconds,
+            **details,
+        }
+        encoded = json.dumps(payload, sort_keys=True, default=str)
+        message = String()
+        message.data = encoded
+        self._diagnostics_publisher.publish(message)
+        try:
+            self._navigation_log_path.parent.mkdir(parents=True, exist_ok=True)
+            with self._navigation_log_path.open("a", encoding="utf-8") as stream:
+                stream.write(encoded + "\n")
+        except OSError as exc:
+            self._node.get_logger().warn(f"Could not write navigation diagnostics: {exc}")
+
+    def _cancel_navigation(self, reason: str) -> bool:
+        if self._goal_handle is None or self._navigation_status == "canceling":
+            return False
+        self._navigation_status = "canceling"
+        self._publish_navigation_event("watchdog_cancel", reason=reason)
+        self._node.get_logger().error(f"Canceling autonomous navigation: {reason}")
+        self._goal_handle.cancel_goal_async()
+        return True
+
+    def _nav_cmd_callback(self, message) -> None:
+        if self._goal_handle is None or self._navigation_status != "navigating":
+            self._spin_only_started_at = None
+            return
+        if not _is_spin_only_command(message.linear.x, message.angular.z):
+            self._spin_only_started_at = None
+            return
+        now = time.monotonic()
+        if self._spin_only_started_at is None:
+            self._spin_only_started_at = now
+            return
+        duration = now - self._spin_only_started_at
+        if duration >= MAX_SPIN_ONLY_SECONDS:
+            self._cancel_navigation(
+                f"Nav2 commanded spin-only motion for {duration:.1f}s "
+                f"(linear={message.linear.x:.3f}, angular={message.angular.z:.3f})"
+            )
+
+    def _handle_navigation_feedback(self, feedback_message) -> None:
+        now = time.monotonic()
+        if now - self._last_feedback_log_at < 2.0:
+            return
+        self._last_feedback_log_at = now
+        feedback = feedback_message.feedback
+        pose = feedback.current_pose.pose
+        covariance = self._localization_covariance or []
+        self._publish_navigation_event(
+            "feedback",
+            x=round(float(pose.position.x), 3),
+            y=round(float(pose.position.y), 3),
+            distance_remaining=round(float(feedback.distance_remaining), 3),
+            navigation_seconds=(
+                int(feedback.navigation_time.sec)
+                + int(feedback.navigation_time.nanosec) / 1_000_000_000
+            ),
+            recoveries=int(feedback.number_of_recoveries),
+            covariance={
+                "x": float(covariance[0]) if len(covariance) >= 36 else None,
+                "y": float(covariance[7]) if len(covariance) >= 36 else None,
+                "yaw": float(covariance[35]) if len(covariance) >= 36 else None,
+            },
+        )
 
     def _load_config(self) -> None:
         if not self._config_path.exists():
@@ -286,12 +380,15 @@ class SemanticMapController:
             handle = future.result()
             if not handle.accepted:
                 self._navigation_status = "rejected"
+                self._publish_navigation_event("goal_rejected")
                 self._node.get_logger().warn(
                     f"Nav2 rejected room goal for {self._navigation_room}"
                 )
                 return
             self._goal_handle = handle
             self._navigation_status = "navigating"
+            self._spin_only_started_at = None
+            self._publish_navigation_event("goal_accepted")
             self._node.get_logger().info(
                 f"Nav2 accepted room goal for {self._navigation_room}"
             )
@@ -307,14 +404,26 @@ class SemanticMapController:
                 wrapped_result.status,
                 f"status {wrapped_result.status}",
             )
-            self._node.get_logger().info(
-                f"Navigation to {self._navigation_room}: {self._navigation_status}"
+            result = wrapped_result.result
+            error_code = int(getattr(result, "error_code", 0))
+            error_msg = str(getattr(result, "error_msg", ""))
+            self._publish_navigation_event(
+                "result", error_code=error_code, error_msg=error_msg
             )
+            log_message = (
+                f"Navigation to {self._navigation_room}: {self._navigation_status}; "
+                f"error_code={error_code}; error_msg={error_msg or 'none'}"
+            )
+            if self._navigation_status == "succeeded":
+                self._node.get_logger().info(log_message)
+            else:
+                self._node.get_logger().warn(log_message)
         except Exception as exc:
             self._navigation_status = f"result error: {exc}"
             self._node.get_logger().warn(self._navigation_status)
         finally:
             self._goal_handle = None
+            self._spin_only_started_at = None
 
     def _handle_plan_goal_response(self, future) -> None:
         try:
@@ -546,7 +655,14 @@ class SemanticMapController:
 
             ctrl._navigation_room = key
             ctrl._navigation_status = "requesting"
-            future = ctrl._nav_client.send_goal_async(goal)
+            ctrl._publish_navigation_event(
+                "goal_requested",
+                target={"x": x, "y": y, "yaw": yaw},
+                start={"x": current_x, "y": current_y},
+            )
+            future = ctrl._nav_client.send_goal_async(
+                goal, feedback_callback=ctrl._handle_navigation_feedback
+            )
             future.add_done_callback(ctrl._handle_goal_response)
             return (
                 f"Requested Nav2 navigation to {key} using its reviewed {source}: "
@@ -566,6 +682,7 @@ class SemanticMapController:
                     return "Navigation goal is still being requested; ask again in a moment."
                 return "No accepted Nav2 navigation goal is active."
             ctrl._navigation_status = "canceling"
+            ctrl._publish_navigation_event("user_cancel")
             ctrl._goal_handle.cancel_goal_async()
             return f"Canceling navigation to {ctrl._navigation_room}."
 

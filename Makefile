@@ -1,4 +1,4 @@
-.PHONY: clean build test health launch launch-navigation launch-localized launch-joystick launch-senses launch-senses-desk venv rviz build-rviz save-map publish-room-markers
+.PHONY: clean build test health launch launch-navigation launch-localized launch-joystick launch-senses launch-senses-desk venv rviz build-rviz save-map publish-room-markers navigation-log
 
 # Virtual environment setup
 VENV_DIR = ros_venv
@@ -89,6 +89,11 @@ save-map:
 
 publish-room-markers:
 	@bash -c "source /opt/ros/jazzy/setup.bash && source install/setup.bash && ros2 run senses room_markers --ros-args -p rooms_config_path:=$(ROOMS_CONFIG)"
+
+navigation-log:
+	@mkdir -p ~/.ros/robopi
+	@touch ~/.ros/robopi/navigation_events.jsonl
+	@tail -n 100 -f ~/.ros/robopi/navigation_events.jsonl
 
 docker:
 	# You may need to do these first, if it complains about permissions errors

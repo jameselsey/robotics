@@ -81,6 +81,8 @@ def generate_launch_description():
                 r"^(.*/)?visualization_marker_array$",
                 r"^(.*/)?diagnostics$",
                 r"^(.*/)?foxglove_health$",
+                r"^(.*/)?navigation_diagnostics$",
+                r"^(.*/)?voice_transcript$",
             ],
         }]
     )

@@ -1,6 +1,7 @@
 """ROS2 voice agent node backed by Strands and Amazon Nova Sonic."""
 
 import asyncio
+import json
 import logging
 import os
 import select
@@ -60,6 +61,7 @@ class VoiceAgent(Node):
         self.get_logger().info("Voice agent node started (wake word + Nova Sonic bidi).")
 
         self.state_pub = self.create_publisher(String, "voice_state", 10)
+        self.transcript_pub = self.create_publisher(String, "voice_transcript", 10)
         self.create_subscription(String, "voice_control", self._voice_control_callback, 10)
         self._movement = MovementController(self)
         self._manual_wake_event = threading.Event()
@@ -431,6 +433,20 @@ class VoiceAgent(Node):
                 async for event in agent.receive():
                     event_type = event.get("type", type(event).__name__) if isinstance(event, dict) else type(event).__name__
                     self.get_logger().debug(f"Nova event received: {event_type}")
+                    if isinstance(event, dict) and event_type == "bidi_transcript_stream":
+                        transcript = {
+                            "role": event.get("role"),
+                            "text": event.get("text") or event.get("current_transcript") or "",
+                            "is_final": bool(event.get("is_final", False)),
+                        }
+                        message = String()
+                        message.data = json.dumps(transcript, sort_keys=True)
+                        self.transcript_pub.publish(message)
+                        if transcript["is_final"] and transcript["text"]:
+                            self.get_logger().info(
+                                f"Nova transcript [{transcript['role'] or 'unknown'}]: "
+                                f"{transcript['text']}"
+                            )
                     await asyncio.gather(*[output(event) for output in outputs])
                 self.get_logger().warn("Nova receive loop ended without an exception.")
             except asyncio.CancelledError:

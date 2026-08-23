@@ -24,12 +24,18 @@ geometry_msgs = types.ModuleType("geometry_msgs")
 geometry_msgs_msg = types.ModuleType("geometry_msgs.msg")
 geometry_msgs_msg.PoseStamped = object
 geometry_msgs_msg.PoseWithCovarianceStamped = object
+geometry_msgs_msg.Twist = object
 geometry_msgs.msg = geometry_msgs_msg
 
 nav_msgs = types.ModuleType("nav_msgs")
 nav_msgs_msg = types.ModuleType("nav_msgs.msg")
 nav_msgs_msg.Path = object
 nav_msgs.msg = nav_msgs_msg
+
+std_msgs = types.ModuleType("std_msgs")
+std_msgs_msg = types.ModuleType("std_msgs.msg")
+std_msgs_msg.String = object
+std_msgs.msg = std_msgs_msg
 
 rclpy = types.ModuleType("rclpy")
 rclpy.time = types.SimpleNamespace(Time=object)
@@ -52,6 +58,8 @@ sys.modules.setdefault("geometry_msgs", geometry_msgs)
 sys.modules.setdefault("geometry_msgs.msg", geometry_msgs_msg)
 sys.modules.setdefault("nav_msgs", nav_msgs)
 sys.modules.setdefault("nav_msgs.msg", nav_msgs_msg)
+sys.modules.setdefault("std_msgs", std_msgs)
+sys.modules.setdefault("std_msgs.msg", std_msgs_msg)
 sys.modules.setdefault("rclpy", rclpy)
 sys.modules.setdefault("rclpy.action", rclpy_action)
 sys.modules.setdefault("rclpy.duration", rclpy_duration)
@@ -64,6 +72,8 @@ if not hasattr(geometry_msgs_msg, "PoseStamped"):
     geometry_msgs_msg.PoseStamped = object
 if not hasattr(geometry_msgs_msg, "PoseWithCovarianceStamped"):
     geometry_msgs_msg.PoseWithCovarianceStamped = object
+if not hasattr(geometry_msgs_msg, "Twist"):
+    geometry_msgs_msg.Twist = object
 sys.modules["geometry_msgs"].msg = geometry_msgs_msg
 
 # Other test modules may also have installed a smaller nav_msgs stub first.
@@ -137,6 +147,35 @@ def test_navigation_accepts_confident_localization_estimate():
     covariance[7] = 0.12
     covariance[35] = 0.20
     assert semantic._localization_confidence_error(covariance) is None
+
+
+@pytest.mark.parametrize(
+    ("linear_x", "angular_z", "expected"),
+    [(0.0, 0.30, True), (0.02, -0.50, True), (0.04, 0.50, False), (0.0, 0.20, False)],
+)
+def test_spin_only_command_detection(linear_x, angular_z, expected):
+    assert semantic._is_spin_only_command(linear_x, angular_z) is expected
+
+
+def test_spin_watchdog_cancels_prolonged_rotation(monkeypatch):
+    controller = semantic.SemanticMapController.__new__(semantic.SemanticMapController)
+    controller._goal_handle = object()
+    controller._navigation_status = "navigating"
+    controller._spin_only_started_at = None
+    reasons = []
+    controller._cancel_navigation = lambda reason: reasons.append(reason)
+    command = types.SimpleNamespace(
+        linear=types.SimpleNamespace(x=0.0),
+        angular=types.SimpleNamespace(z=0.35),
+    )
+    times = iter([10.0, 10.0 + semantic.MAX_SPIN_ONLY_SECONDS])
+    monkeypatch.setattr(semantic.time, "monotonic", lambda: next(times))
+
+    controller._nav_cmd_callback(command)
+    controller._nav_cmd_callback(command)
+
+    assert len(reasons) == 1
+    assert "spin-only motion" in reasons[0]
 
 
 def test_completed_route_plan_is_published_without_navigation_state():

@@ -106,14 +106,16 @@ controller_server:
       ax_min: -3.0
       ay_max: 3.0
       ay_min: -3.0
-      az_max: 3.5
+      # Tracked skid-steer chassis: keep rotations gentle so encoder-only yaw
+      # does not diverge badly from physical yaw during in-place turns.
+      az_max: 1.0
       vx_std: 0.2
       vy_std: 0.2
       wz_std: 0.4
       vx_max: 0.25
       vx_min: -0.15
       vy_max: 0.5
-      wz_max: 1.0
+      wz_max: 0.35
       iteration_count: 1
       prune_distance: 1.7
       transform_tolerance: 0.1
