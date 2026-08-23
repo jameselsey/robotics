@@ -51,7 +51,9 @@ class LocalizationPoseManager(Node):
             self._amcl_pose_callback,
             10,
         )
-        self.create_timer(2.0, self._publish_initial_pose)
+        # Publish promptly and repeat until AMCL acknowledges the pose. A long
+        # first delay makes AMCL warn that no initial pose has been supplied.
+        self.create_timer(0.5, self._publish_initial_pose)
 
     def _fallback_pose(self):
         yaw = self.get_parameter('initial_pose_yaw').value
@@ -91,7 +93,10 @@ class LocalizationPoseManager(Node):
             return
 
         message = PoseWithCovarianceStamped()
-        message.header.stamp = self.get_clock().now().to_msg()
+        # Keep the timestamp at zero so AMCL transforms the seed with the
+        # latest available odom->base_link transform. Stamping it with "now"
+        # races the lower-rate odometry publisher at startup and causes a
+        # harmless but noisy extrapolation-into-the-future warning.
         message.header.frame_id = 'map'
         message.pose.pose.position.x = float(self.initial_pose['x'])
         message.pose.pose.position.y = float(self.initial_pose['y'])

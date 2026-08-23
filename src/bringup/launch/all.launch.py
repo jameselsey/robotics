@@ -31,7 +31,10 @@ def generate_launch_description():
     foxglove_bridge_node = Node(
         package='foxglove_bridge',
         executable='foxglove_bridge',
-        name='foxglove_bridge',
+        # The executable hosts a component which is itself named
+        # foxglove_bridge. Give the host a distinct name so ROS does not see
+        # two nodes with the same fully-qualified name.
+        name='foxglove_bridge_launcher',
         output='screen',
         respawn=True,
         respawn_delay=2.0,
@@ -43,6 +46,15 @@ def generate_launch_description():
             # intermittently lose the robot and scan after reconnecting.
             'max_qos_depth': 100,
             'send_buffer_limit_bytes':67108864,
+            # Foxglove is used here for visualization and client publishing,
+            # not parameter editing. Disabling parameter introspection avoids
+            # repeated errors from Nav2's short-lived internal BT nodes.
+            'capabilities': [
+                'clientPublish',
+                'services',
+                'connectionGraph',
+                'assets',
+            ],
             # Expose only these topics to Foxglove (ECMAScript regex)
             "topic_whitelist": [
                 r"^(.*/)?camera_info$",                                

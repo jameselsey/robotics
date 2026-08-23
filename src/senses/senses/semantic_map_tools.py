@@ -8,7 +8,7 @@ import rclpy
 import yaml
 from action_msgs.msg import GoalStatus
 from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped
-from nav_msgs.msg import Path
+from nav_msgs.msg import Path as NavPath
 from rclpy.action import ActionClient
 from rclpy.duration import Duration
 from strands import tool
@@ -186,7 +186,7 @@ class SemanticMapController:
         self._planning_room = None
         self._planning_status = "idle"
         self._localization_covariance = None
-        self._plan_publisher = ros_node.create_publisher(Path, "/plan", 10)
+        self._plan_publisher = ros_node.create_publisher(NavPath, "/plan", 10)
         ros_node.create_subscription(
             PoseWithCovarianceStamped,
             "/amcl_pose",
