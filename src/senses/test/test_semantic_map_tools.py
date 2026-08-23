@@ -26,6 +26,11 @@ geometry_msgs_msg.PoseStamped = object
 geometry_msgs_msg.PoseWithCovarianceStamped = object
 geometry_msgs.msg = geometry_msgs_msg
 
+nav_msgs = types.ModuleType("nav_msgs")
+nav_msgs_msg = types.ModuleType("nav_msgs.msg")
+nav_msgs_msg.Path = object
+nav_msgs.msg = nav_msgs_msg
+
 rclpy = types.ModuleType("rclpy")
 rclpy.time = types.SimpleNamespace(Time=object)
 rclpy_action = types.ModuleType("rclpy.action")
@@ -45,6 +50,8 @@ sys.modules.setdefault("action_msgs", action_msgs)
 sys.modules.setdefault("action_msgs.msg", action_msgs_msg)
 sys.modules.setdefault("geometry_msgs", geometry_msgs)
 sys.modules.setdefault("geometry_msgs.msg", geometry_msgs_msg)
+sys.modules.setdefault("nav_msgs", nav_msgs)
+sys.modules.setdefault("nav_msgs.msg", nav_msgs_msg)
 sys.modules.setdefault("rclpy", rclpy)
 sys.modules.setdefault("rclpy.action", rclpy_action)
 sys.modules.setdefault("rclpy.duration", rclpy_duration)
@@ -58,6 +65,12 @@ if not hasattr(geometry_msgs_msg, "PoseStamped"):
 if not hasattr(geometry_msgs_msg, "PoseWithCovarianceStamped"):
     geometry_msgs_msg.PoseWithCovarianceStamped = object
 sys.modules["geometry_msgs"].msg = geometry_msgs_msg
+
+# Other test modules may also have installed a smaller nav_msgs stub first.
+nav_msgs_msg = sys.modules["nav_msgs.msg"]
+if not hasattr(nav_msgs_msg, "Path"):
+    nav_msgs_msg.Path = object
+sys.modules["nav_msgs"].msg = nav_msgs_msg
 
 semantic = importlib.import_module("senses.semantic_map_tools")
 
@@ -124,6 +137,31 @@ def test_navigation_accepts_confident_localization_estimate():
     covariance[7] = 0.12
     covariance[35] = 0.20
     assert semantic._localization_confidence_error(covariance) is None
+
+
+def test_completed_route_plan_is_published_without_navigation_state():
+    published = []
+    controller = semantic.SemanticMapController.__new__(semantic.SemanticMapController)
+    controller._planning_room = "hallway"
+    controller._planning_status = "computing"
+    controller._plan_goal_handle = object()
+    controller._plan_publisher = types.SimpleNamespace(publish=published.append)
+    controller._node = types.SimpleNamespace(
+        get_logger=lambda: types.SimpleNamespace(info=lambda _message: None, warn=lambda _message: None)
+    )
+    path = types.SimpleNamespace(poses=[object(), object(), object()])
+    wrapped_result = types.SimpleNamespace(
+        status=action_msgs_msg.GoalStatus.STATUS_SUCCEEDED,
+        result=types.SimpleNamespace(path=path),
+    )
+    future = types.SimpleNamespace(result=lambda: wrapped_result)
+
+    controller._handle_plan_result(future)
+
+    assert published == [path]
+    assert controller._planning_status == "ready (3 poses)"
+    assert controller._plan_goal_handle is None
+    assert not hasattr(controller, "_goal_handle")
 
 
 @pytest.mark.parametrize("index", [0, 7, 35])

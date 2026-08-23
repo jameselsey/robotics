@@ -8,14 +8,16 @@ import rclpy
 import yaml
 from action_msgs.msg import GoalStatus
 from geometry_msgs.msg import PoseStamped, PoseWithCovarianceStamped
+from nav_msgs.msg import Path
 from rclpy.action import ActionClient
 from rclpy.duration import Duration
 from strands import tool
 from tf2_ros import Buffer, TransformException, TransformListener
 
 try:
-    from nav2_msgs.action import NavigateToPose
+    from nav2_msgs.action import ComputePathToPose, NavigateToPose
 except Exception:  # pragma: no cover - nav2_msgs may be absent on development machines
+    ComputePathToPose = None
     NavigateToPose = None
 
 
@@ -176,10 +178,15 @@ class SemanticMapController:
         self._tf_buffer = Buffer()
         self._tf_listener = TransformListener(self._tf_buffer, ros_node)
         self._nav_client = None
+        self._plan_client = None
         self._goal_handle = None
+        self._plan_goal_handle = None
         self._navigation_room = None
         self._navigation_status = "idle"
+        self._planning_room = None
+        self._planning_status = "idle"
         self._localization_covariance = None
+        self._plan_publisher = ros_node.create_publisher(Path, "/plan", 10)
         ros_node.create_subscription(
             PoseWithCovarianceStamped,
             "/amcl_pose",
@@ -188,6 +195,10 @@ class SemanticMapController:
         )
         if NavigateToPose is not None:
             self._nav_client = ActionClient(ros_node, NavigateToPose, "navigate_to_pose")
+        if ComputePathToPose is not None:
+            self._plan_client = ActionClient(
+                ros_node, ComputePathToPose, "compute_path_to_pose"
+            )
         self._load_config()
 
     def _amcl_pose_callback(self, message) -> None:
@@ -305,6 +316,47 @@ class SemanticMapController:
         finally:
             self._goal_handle = None
 
+    def _handle_plan_goal_response(self, future) -> None:
+        try:
+            handle = future.result()
+            if not handle.accepted:
+                self._planning_status = "rejected"
+                self._node.get_logger().warn(
+                    f"Nav2 rejected route plan for {self._planning_room}"
+                )
+                return
+            self._plan_goal_handle = handle
+            self._planning_status = "computing"
+            handle.get_result_async().add_done_callback(self._handle_plan_result)
+        except Exception as exc:
+            self._planning_status = f"goal response error: {exc}"
+            self._node.get_logger().warn(self._planning_status)
+
+    def _handle_plan_result(self, future) -> None:
+        try:
+            wrapped_result = future.result()
+            if wrapped_result.status != GoalStatus.STATUS_SUCCEEDED:
+                self._planning_status = _GOAL_STATUS_NAMES.get(
+                    wrapped_result.status,
+                    f"status {wrapped_result.status}",
+                )
+                self._node.get_logger().warn(
+                    f"Route plan to {self._planning_room}: {self._planning_status}"
+                )
+                return
+            path = wrapped_result.result.path
+            self._plan_publisher.publish(path)
+            self._planning_status = f"ready ({len(path.poses)} poses)"
+            self._node.get_logger().info(
+                f"Route plan to {self._planning_room}: {self._planning_status}; "
+                "no movement goal was sent"
+            )
+        except Exception as exc:
+            self._planning_status = f"result error: {exc}"
+            self._node.get_logger().warn(self._planning_status)
+        finally:
+            self._plan_goal_handle = None
+
     def _navigation_summary(self) -> str:
         server_ready = (
             self._nav_client is not None
@@ -379,8 +431,63 @@ class SemanticMapController:
             return f"Current map pose: x={x:.2f}, y={y:.2f}. Labelled room: {room}."
 
         @tool
+        def plan_route_to_room(room_name: str) -> str:
+            """Plan and display a route to a labelled room without moving the robot. Use for plan, preview, calculate, or show-route requests; this tool never sends a navigation or motor command."""
+            rooms = ctrl._config.get("rooms") or {}
+            key, error = ctrl._resolve_room_key(room_name)
+            if error:
+                return f"ERROR: {error}"
+            room = rooms[key] or {}
+            try:
+                x, y, yaw, source = ctrl._room_goal(key, room)
+            except ValueError as exc:
+                return f"ERROR: {exc}"
+            if source != "navigate_pose":
+                return (
+                    f"ERROR: Room '{key}' has no reviewed navigate_pose, so a safe "
+                    "route target is unavailable. No movement occurred."
+                )
+            if ctrl._plan_client is None:
+                return "ERROR: nav2_msgs is not installed, so I cannot compute a route."
+            if not ctrl._plan_client.wait_for_server(timeout_sec=2.0):
+                return (
+                    "ERROR: Nav2 compute_path_to_pose action server is not running. "
+                    "No movement occurred."
+                )
+            try:
+                ctrl._current_pose_xy()
+            except RuntimeError as exc:
+                return f"ERROR: Cannot plan without localization: {exc}"
+            if ctrl._plan_goal_handle is not None or ctrl._planning_status in {
+                "requesting",
+                "computing",
+            }:
+                return f"ERROR: A route plan to {ctrl._planning_room} is already being computed."
+
+            goal = ComputePathToPose.Goal()
+            goal.goal = PoseStamped()
+            goal.goal.header.frame_id = ctrl.map_frame
+            goal.goal.header.stamp = ctrl._node.get_clock().now().to_msg()
+            goal.goal.pose.position.x = x
+            goal.goal.pose.position.y = y
+            qz, qw = _yaw_to_quaternion(yaw)
+            goal.goal.pose.orientation.z = qz
+            goal.goal.pose.orientation.w = qw
+            goal.planner_id = "GridBased"
+            goal.use_start = False
+
+            ctrl._planning_room = key
+            ctrl._planning_status = "requesting"
+            future = ctrl._plan_client.send_goal_async(goal)
+            future.add_done_callback(ctrl._handle_plan_goal_response)
+            return (
+                f"Requested a route plan to {key} at x={x:.2f}, y={y:.2f}. "
+                "This only computes and displays a path; no movement goal was sent."
+            )
+
+        @tool
         def navigate_to_room(room_name: str) -> str:
-            """Navigate safely to a labelled room's reviewed navigate_pose using Nav2."""
+            """Start physical autonomous movement to a labelled room. Use only when the user explicitly asks the robot to go, drive, move, travel, or navigate there; never use for plan, preview, calculate, or show-route requests."""
             rooms = ctrl._config.get("rooms") or {}
             key, error = ctrl._resolve_room_key(room_name)
             if error:
@@ -469,6 +576,7 @@ class SemanticMapController:
             list_known_rooms,
             describe_room_annotations,
             get_room_details,
+            plan_route_to_room,
             navigate_to_room,
             get_navigation_status,
             cancel_navigation,
