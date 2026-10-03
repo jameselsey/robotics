@@ -7,10 +7,10 @@ unfinished work. The agreed plan originated on 2026-10-03.
 
 ## Current checkpoint
 
-- **Active phase:** 2 checkpoint, awaiting user review.
-- **Implementation:** phase 1 committed at `d4931db`; phase 2 implemented and software-validated.
-- **User review / commit / push:** phase 1 reviewed and pushed by the user. Phase 2 changes will remain uncommitted for review.
-- **Next step:** user reviews/commits/pushes phase 2; start phase 3 only when requested.
+- **Active phase:** 3, reproducible Compose infrastructure.
+- **Implementation:** phase 3 implemented and software-validated; awaiting user review.
+- **User review / commit / push:** phase 2 committed/pushed by the user (`4952a49`); phase 3 changes remain uncommitted for review.
+- **Next step:** review, commit and push phase 3; begin phase 4 only when requested.
 - **Hardware:** the VENTUNO has not been installed on the chassis or wired to its
   motors, encoders, LED, LiDAR, controller, or robot audio devices. Physical
   acceptance remains pending even if individual peripherals appear on the board.
@@ -18,8 +18,8 @@ unfinished work. The agreed plan originated on 2026-10-03.
 | Phase | Status | Checkpoint |
 | --- | --- | --- |
 | 1. Preserve and clean | Committed at `d4931db` | Reviewed/pushed by user; local baseline tag verified |
-| 2. ROS packaging/build | Implemented; review pending | Five packages build; all 67 colcon results pass |
-| 3. Compose infrastructure | Not started | Clean container build and operator workflow |
+| 2. ROS packaging/build | Committed at `4952a49` | Five packages build; all 67 colcon results pass |
+| 3. Compose infrastructure | Ready for review | Container builds, 69 individual tests, isolated production smoke pass |
 | 4. Local voice and MCU | Not started | Mock integration, firmware build, and verified wiring guide |
 | 5. Integration and handoff | Not started | Software acceptance; physical checks performed by user |
 
@@ -46,7 +46,7 @@ The agreed Pi baseline is **`8100627c087d5cc25e0c40bdf27b5d8a42e131bf`**
 GitHub `main` matched this commit during the planning inventory.
 
 The local `pi5-final` tag was verified in phase 2 to resolve to the agreed SHA.
-GitHub `main` was verified at `d4931db`; the tag was not returned by the remote
+GitHub `main` was reverified at `4952a49` in phase 3; the tag was not returned by the remote
 query, so its publication remains unconfirmed. The agent creates no tags.
 If needed, these user-operated commands preserve the original Pi revision even
 after `main` moves:
@@ -252,7 +252,7 @@ Suggested phase 1 commit message: `Preserve Pi baseline and clean obsolete robot
 
 ## Phase 2 change and validation record
 
-Completed on 2026-10-03; changes remain uncommitted for user review.
+Completed on 2026-10-03; subsequently reviewed/committed/pushed by the user at `4952a49`.
 
 - Corrected all five manifests: direct ROS/system dependencies, valid build types,
   consistent maintainer/license metadata, and focused test dependencies. Removed
@@ -332,3 +332,79 @@ Foxglove browser checks and physical operation remain unverified. Phase 2 softwa
 checks do not establish robot readiness.
 
 Suggested phase 2 commit message: `Clean ROS packaging, generated description, and voice configuration`.
+
+## Phase 3 checkpoint — implemented, awaiting review
+
+Phase 2 is committed/pushed at `4952a49`; the tree was clean at phase 3 start.
+Phase 3 changes remain uncommitted. See [container operations](CONTAINERS.md) for
+build, test, model setup, device configuration, and eventual foreground startup.
+
+Implemented:
+
+- Digest-pinned ARM64 Jazzy build/test/runtime and optional RViz stages, a
+  93-distribution Python 3.12 hash lock, and `sllidar_ros2` source pinned to
+  `34300099fadfc772965962dec837bf436706188f`. Both vendor and five project
+  packages compile; the vendor emits upstream zero-size-array pedantic warnings.
+- Opt-in Compose profiles for local voice, Nova, checks, model downloads and RViz.
+  Inference APIs bind to loopback; Foxglove retains port 8765. Hardware mounts and
+  Nova credentials are separate overrides. ROS runs nonroot with a read-only
+  root filesystem and persistent state/maps outside its image.
+- Container Make workflows replace native application dependency installation.
+  Preparation preserves existing runtime files. Preflight checks resolved Compose
+  paths, model readiness and runtime checksum, and refuses a competing FastRPC
+  stack. No privileged containers or Docker socket mounts are required.
+- Runtime launcher and Make preflight deliberately block robot startup until
+  phase 4 provides MCU/local-voice adapters and final launch/readiness logic.
+  There is no bypass flag. Image builds do not establish robot readiness.
+- Original senses packages, acknowledgement sounds, maps, calibration and ROS
+  interfaces remain preserved. Optional RViz now uses the ARM64 Jazzy image rather
+  than the obsolete separate image and hardcoded Pi DDS peer configuration.
+
+Validation:
+
+- `make build` builds the ROS runtime and checks images. `make test` passes:
+  **65 individual ROS pytest checks** (67 colcon results including two CTest
+  wrappers) plus **four deployment tests**, totaling **69 individual tests**.
+  Zero errors, failures or skips were reported.
+- Isolated checks run without network, hardware, credentials or host source
+  mounts. Real production imports, WebRTC audio processing, both MP3 decodes to a
+  null sink, URDF validation, vendor executable discovery, launch argument
+  inspection and `pip check` pass. No ROS nodes or audio devices are started.
+- The actual runtime image passes nonroot/read-only import checks and rejects
+  startup at the phase-4 gate before hardware access. Ruff lint/format passes for
+  23 files; all 48 Python files and five manifests parse. Compose base and
+  hardware/Nova configurations, operator recipe dry runs, shell syntax, local
+  documentation links and `git diff --check` pass.
+- `make prepare` copied retained maps and custom wake models into ignored runtime
+  directories, verified byte-for-byte. No inference models were downloaded.
+  The pinned openWakeWord image's CLI and custom-model naming were inspected.
+- `make build-rviz` passes; the resulting ARM64 image exposes the installed
+  `rviz2` executable, checked without launching a GUI or ROS node. GUI rendering
+  and access from the Mac are not verified.
+
+Limits and next phase:
+
+- Existing `local-voice-*` containers remained running and untouched. No robot or
+  inference services were started, stopped or restarted; no firmware was flashed,
+  host software installed, permissions changed or unrelated storage pruned.
+- GenieX's existing board runtime is a checksum-pinned, read-only host prerequisite.
+  Model downloads are explicit setup tasks. Accelerator firmware, kernel drivers,
+  Router service and device permissions remain host responsibilities.
+- ROS dependency layers retain compiler/test tools to share the existing cache;
+  the runtime image is not yet minimal. Digest/source/Python pins do not make
+  changing distribution apt repositories a historical snapshot.
+- Make defaults to the legacy Docker builder to reuse the phase-2 apt cache on
+  this storage-constrained board. An initial Compose BuildKit attempt was canceled
+  before duplicating that large layer. Docker's legacy builder is deprecated;
+  use `DOCKER_BUILDKIT=1` on a host with adequate space, as documented.
+- Approximately **1.8 GiB free** remained on the board after builds. Additional
+  models need more space or explicit reuse of existing model directories; do not
+  automatically prune unrelated images. Validation logs under
+  `/tmp/robotics-phase3` are disposable; checked-in build/test workflows persist.
+- Phase 4 must implement and verify local voice, MCU transport, safe motor/encoder
+  firmware, board-specific build target/pins and wiring documentation. Phase 5
+  covers Foxglove/network and software acceptance. Physical robot operation remains
+  pending the user's wiring and supervised checks.
+
+Suggested phase 3 commit message:
+`Containerize ROS builds and add the VENTUNO Compose infrastructure`.

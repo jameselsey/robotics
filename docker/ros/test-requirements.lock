@@ -1,0 +1,2 @@
+# ARM64 lint tooling; pytest is provided by apt.
+ruff==0.15.1 --hash=sha256:a9457e3c3291024866222b96108ab2d8265b477e5b1534c7ddb1810904858d16

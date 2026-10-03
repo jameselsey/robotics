@@ -1,34 +1,258 @@
+name: robotics
+
+x-logging: &logging
+  driver: json-file
+  options: {max-size: 10m, max-file: "3"}
+
+x-ros: &ros
+  image: robotics-ros:jazzy
+  build: {context: ., dockerfile: docker/ros/Dockerfile, target: runtime}
+  platform: linux/arm64
+  network_mode: host
+  user: "${ROBOT_UID:-1000}:${ROBOT_GID:-1000}"
+  init: true
+  restart: "no"
+  stop_signal: SIGINT
+  stop_grace_period: 30s
+  stdin_open: true
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  tmpfs: [/tmp:mode=1777,size=256m]
+  logging: *logging
+  environment: &ros-env
+    HOME: /state/home
+    ROS_HOME: /state/ros
+    ROS_LOG_DIR: /state/logs
+    ROS_DOMAIN_ID: "${ROS_DOMAIN_ID:-0}"
+    RMW_IMPLEMENTATION: rmw_cyclonedds_cpp
+    RCUTILS_COLORIZED_OUTPUT: "1"
+    RCUTILS_CONSOLE_OUTPUT_FORMAT: "[{severity}] [{time}] [{name}]: {message}"
+    VOICE_BACKEND: local
+    ROS_LAUNCH_ARGS: "${ROS_LAUNCH_ARGS:-}"
+    ROUTER_SOCKET: /var/run/arduino-router.sock
+    FOXGLOVE_PORT: "${FOXGLOVE_PORT:-8765}"
+    OWW_HOST: 127.0.0.1
+    OWW_PORT: "${WAKE_PORT:-10400}"
+    SPEECH_URL: "http://127.0.0.1:${ASR_PORT:-18085}"
+    TTS_URL: "http://127.0.0.1:${TTS_PORT:-18086}"
+    GENIEX_BASE_URL: "http://127.0.0.1:${GENIEX_PORT:-28181}/v1"
+    GENIEX_MODEL: "${GENIEX_MODEL:-qualcomm/Qwen3-VL-4B-Instruct}"
+    AUDIO_INPUT_NAME: "${AUDIO_INPUT_NAME:-Brio}"
+    AUDIO_OUTPUT_NAME: "${AUDIO_OUTPUT_NAME:-}"
+    ROBOT_MAP_FILE: /maps/house.yaml
+  volumes:
+    - type: bind
+      source: ./runtime/state
+      target: /state
+      bind: {create_host_path: false}
+    - type: bind
+      source: ./runtime/maps
+      target: /maps
+      bind: {create_host_path: false}
+    - type: bind
+      source: ./src/drive_controller/config
+      target: /config/drive
+      read_only: true
+      bind: {create_host_path: false}
+    - type: bind
+      source: ./src/senses/config
+      target: /config/senses
+      read_only: true
+      bind: {create_host_path: false}
+  command: [python3, /opt/robot/bin/robot-start.py]
+
+x-accelerator: &accelerator
+  devices:
+    - /dev/dma_heap/system
+    - /dev/dma_heap/qcom,system
+    - /dev/fastrpc-cdsp
+    - /dev/fastrpc-cdsp-secure
+    - /dev/fastrpc-adsp-secure
+    - /dev/fastrpc-gdsp0
+    - /dev/fastrpc-gdsp0-secure
+
+x-audio: &audio
+  <<: *accelerator
+  image: artifacts.codelinaro.org/iot-solutions-microservices/audio-analytics:1.0.2@sha256:ee2bec26acdeb81373a7f81d76461409b201ee792a13abafd448544a3e92aa14
+  platform: linux/arm64
+  profiles: [local-voice, robot]
+  user: "0:0"
+  restart: "no"
+  security_opt: [no-new-privileges:true]
+  logging: *logging
+  init: true
+  stop_grace_period: 30s
+  entrypoint: [bash, /robot/audio-entrypoint.sh]
+  environment:
+    LOG_LEVEL: "20"
+    NODE_ENV: production
+    BLACKBOX_CONTAINER: "true"
+    DEV_MODE: "false"
+    MODELS_DIR: /mnt/work/models
+    ASR_MODELS_DIR: /mnt/work/models/asr
+    TTS_MODELS_DIR: /mnt/work/models/tts
+    TRANSLATION_MODELS_DIR: /mnt/work/models/translation
+    SOCKET_PATH: /tmp/audio-sockets/audio-analytics.sock
+    VAD_LEN_HANGOVER: "70"
+    ASR_TRANSCRIPTION_IN: asr.transcription.in
+    ASR_TRANSCRIPTION_OUT: asr.transcription.out
+    ASR_MODELS: asr.models
+    T2T_TRANSLATION_IN: t2t.translation.in
+    T2T_TRANSLATION_OUT: t2t.translation.out
+    T2T_MODELS: t2t.models
+    TTS_TEXT_IN: tts.text.in
+    TTS_AUDIO_OUT: tts.audio.out
+    TTS_MODELS: tts.models
+    SD_ENABLE_PULSE: "0"
+  tmpfs: [/app/uploads:mode=1777,size=64m, /usr/share/qcom/conf.d]
+  healthcheck:
+    test: [CMD, curl, -f, http://localhost:8085/audio-analytics/v1/api/health]
+    interval: 5s
+    timeout: 3s
+    retries: 20
+
 services:
-  openwakeword:
-    image: rhasspy/wyoming-openwakeword:latest
-    container_name: openwakeword
-    restart: unless-stopped
-    ports:
-      - "10400:10400"
-    volumes:
-      - ./openwakeword/custom:/custom:ro
-    command: >
-      --uri tcp://0.0.0.0:10400
-      --custom-model-dir /custom
-      --preload-model computer
-      --debug
-      
-  rviz:
-    build:
-      context: ./docker/rviz
-    image: robotics-rviz:jazzy
-    container_name: robotics-rviz
-    network_mode: host
+  ros:
+    <<: *ros
+    profiles: [robot]
+    depends_on:
+      openwakeword: {condition: service_healthy}
+      speech: {condition: service_healthy}
+      tts: {condition: service_healthy}
+      geniex: {condition: service_healthy}
+
+  ros-nova:
+    <<: *ros
+    profiles: [nova]
     environment:
-      - DISPLAY=${DISPLAY:-host.docker.internal:0}
-      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}
-      - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
-      - CYCLONEDDS_URI=file:///etc/cyclonedds.xml
-      - QT_X11_NO_MITSHM=1
-      - LIBGL_ALWAYS_SOFTWARE=1
+      <<: *ros-env
+      VOICE_BACKEND: nova
+      AWS_PROFILE: "${AWS_PROFILE:-default}"
+      AWS_REGION: "${AWS_REGION:-us-east-1}"
+    depends_on:
+      openwakeword: {condition: service_healthy}
+
+  checks:
+    image: robotics-checks:jazzy
+    build: {context: ., dockerfile: docker/ros/Dockerfile, target: test}
+    platform: linux/arm64
+    profiles: [tools]
+    network_mode: none
+    command: [bash, /workspace/tools/check.sh]
+
+  openwakeword:
+    image: rhasspy/wyoming-openwakeword@sha256:b2ddb3d6fe719c88619a2bfcbd96cf74c0f81cef90f6a479eeb7b8aab59e5a13
+    platform: linux/arm64
+    profiles: [robot, nova, local-voice]
+    restart: "no"
+    logging: *logging
+    ports: ["127.0.0.1:${WAKE_PORT:-10400}:10400"]
     volumes:
-      - /tmp/.X11-unix:/tmp/.X11-unix:rw
-      - ./src:/workspace/src:ro
-    command: bash -lc "source /opt/ros/jazzy/setup.bash && rviz2"
-    profiles:
-      - tools
+      - ${WAKE_MODELS_DIR:-./runtime/models/wakeword}:/custom:ro
+    command: [--uri, "tcp://0.0.0.0:10400", --custom-model-dir, /custom]
+    healthcheck:
+      test: [CMD, python3, -c, "import socket; socket.create_connection(('127.0.0.1',10400),2).close()"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  speech:
+    <<: *audio
+    ports: ["127.0.0.1:${ASR_PORT:-18085}:8085"]
+    volumes:
+      - ${ASR_MODELS_DIR:-./runtime/models/asr}:/mnt/work/models/asr:ro
+      - asr-cache:/tmp/audio-cache
+      - ./docker/inference/audio-entrypoint.sh:/robot/audio-entrypoint.sh:ro
+      - /sys/firmware/devicetree/base/model:/run/device-model:ro
+      - /usr/share/qcom:/usr/share/qcom:ro
+
+  tts:
+    <<: *audio
+    ports: ["127.0.0.1:${TTS_PORT:-18086}:8085"]
+    volumes:
+      - ${TTS_MODELS_DIR:-./runtime/models/tts}:/mnt/work/models/tts:ro
+      - tts-cache:/tmp/audio-cache
+      - ./docker/inference/audio-entrypoint.sh:/robot/audio-entrypoint.sh:ro
+      - /sys/firmware/devicetree/base/model:/run/device-model:ro
+      - /usr/share/qcom:/usr/share/qcom:ro
+
+  geniex:
+    <<: *accelerator
+    image: ghcr.io/arduino/app-bricks/python-apps-base:0.11.0@sha256:87a7ff27cc6cf381593e7a2a7b98cc9fcde4b16235e76e5e3f56fb4057335273
+    platform: linux/arm64
+    profiles: [local-voice, robot]
+    user: "0:0"
+    restart: "no"
+    logging: *logging
+    init: true
+    stop_grace_period: 30s
+    entrypoint: /opt/geniex/geniex
+    command: [--skip-update, --log, info, serve, --host, "0.0.0.0:18181", --compute, npu, --keepalive, "3600"]
+    environment:
+      LD_LIBRARY_PATH: /opt/geniex:/opt/host-rpc
+      GENIEX_DATADIR: /models
+    ports: ["127.0.0.1:${GENIEX_PORT:-28181}:18181"]
+    volumes:
+      - type: bind
+        source: ${GENIEX_RUNTIME_DIR:-${HOME}/.local/share/geniex}
+        target: /opt/geniex
+        read_only: true
+        bind: {create_host_path: false}
+      - ${GENIEX_CACHE_DIR:-${HOME}/.cache/geniex}:/models
+      - /lib/aarch64-linux-gnu/libcdsprpc.so.1:/opt/host-rpc/libcdsprpc.so:ro
+      - /lib/aarch64-linux-gnu/libadsprpc.so.1:/opt/host-rpc/libadsprpc.so:ro
+      - /lib/aarch64-linux-gnu/libdmabufheap.so.0:/opt/host-rpc/libdmabufheap.so.0:ro
+      - /usr/share/qcom:/usr/share/qcom:ro
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:18181/v1/models',timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  download-asr: &downloader
+    image: ghcr.io/arduino/app-bricks/models-downloader:0.11.0@sha256:a152a007bb299ec208a89e4dd67a47fa9eeca4866d5b14371662d2b5a2a0ae4a
+    platform: linux/arm64
+    profiles: [setup]
+    user: "${ROBOT_UID:-1000}:${ROBOT_GID:-1000}"
+    entrypoint: [bash, /app/ai_hub/ai_hub_model_downloader.sh]
+    volumes: ["${ASR_MODELS_DIR:-./runtime/models/asr}:/models"]
+    environment:
+      model_type: voice_ai
+      model_name: whisper_small_quantized
+      quantization: w8a16
+      chipset: qualcomm-qcs8275
+      version: "0.57.0"
+      model_directory: whisper_small_quantized-voice_ai-w8a16-qualcomm_qcs8275
+
+  download-tts:
+    <<: *downloader
+    volumes: ["${TTS_MODELS_DIR:-./runtime/models/tts}:/models"]
+    environment:
+      model_type: voice_ai
+      model_name: pipertts_en
+      quantization: float
+      chipset: qualcomm-qcs8275
+      version: "0.57.1"
+      model_directory: pipertts_en-voice_ai-float-qualcomm_qcs8275
+
+  rviz:
+    image: robotics-rviz:jazzy
+    build: {context: ., dockerfile: docker/ros/Dockerfile, target: rviz}
+    platform: linux/arm64
+    profiles: [rviz]
+    network_mode: host
+    user: "${ROBOT_UID:-1000}:${ROBOT_GID:-1000}"
+    environment:
+      DISPLAY: "${DISPLAY:-host.docker.internal:0}"
+      ROS_DOMAIN_ID: "${ROS_DOMAIN_ID:-0}"
+      RMW_IMPLEMENTATION: rmw_cyclonedds_cpp
+      QT_X11_NO_MITSHM: "1"
+      LIBGL_ALWAYS_SOFTWARE: "1"
+      HOME: /tmp
+    volumes: [/tmp/.X11-unix:/tmp/.X11-unix:rw]
+    command: [rviz2]
+
+volumes:
+  asr-cache:
+  tts-cache:

@@ -29,27 +29,26 @@ The Pi implementation provides:
 The VENTUNO migration will retain these capabilities while moving Linux
 application dependencies into Docker Compose and GPIO duties to the STM32.
 Local Whisper, GenieX, and Piper services will become the default voice backend;
-Nova will remain selectable. These changes are planned, not implemented yet.
+Nova will remain selectable. Compose infrastructure is implemented; local voice
+and STM32 integration remain pending.
 
 ## Installation and operation
 
 Read [installation status](docs/INSTALL.md) before installing dependencies.
 For the complete original Pi setup, use the baseline link above.
 
-The retained native ROS workflow still uses:
+The container build and hardware-independent checks are now available:
 
 ```bash
+make config
 make build
-make launch
+make test
 ```
 
-It requires an existing ROS 2 Jazzy installation, Python environment, vendor
-workspace, and Pi hardware configuration. It is not ready to run the robot on
-VENTUNO. Container build and startup commands will replace this setup in phase 3.
-
-The current Compose file runs the wake-word service and optional RViz tooling;
-it does not yet run ROS or local inference. Launch and stop robot processes from
-your own terminal so you retain Ctrl-C control.
+See [container operation](docs/CONTAINERS.md) for persistent data, model setup,
+service profiles, device configuration, and operator commands. The robot remains
+gated until phase 4 implements the STM32 and local voice adapters. Do not run the
+old Pi GPIO code on VENTUNO. Robot launch/stop remains under your terminal control.
 
 Once the robot is running, connect Foxglove from a Mac on the same network to
 `ws://<robot-hostname-or-IP>:8765`. The final VENTUNO connection and acceptance
@@ -60,6 +59,7 @@ checks will be documented during the migration.
 ## Project documentation
 
 - [ROS packages](src/README.md)
+- [Container build and operation](docs/CONTAINERS.md)
 - [Hardware build photographs and Pi chassis notes](docs/HARDWARE.md)
 - [Camera and voice vision](docs/CAMERA.md)
 - [Mapping and room annotation](docs/MAPPING.md)

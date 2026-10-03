@@ -1,6 +1,6 @@
 # From wheel encoders to a ROS 2 SLAM map
 
-> This guide records the Raspberry Pi calibration and native ROS workflow.
+> This guide records the Raspberry Pi calibration and retained ROS behavior.
 > Its geometry and diagnostic checks remain useful; VENTUNO startup and wiring
 > are pending the [migration](VENTUNO_MIGRATION.md). Run launch/restart steps
 > yourself from your terminal, after the hardware is connected and checked.
@@ -58,18 +58,16 @@ CMake generates the URDF in the build tree and installs it under the
 `tank_description` package share directory. Bringup reads that installed file
 and publishes `/robot_description` for Foxglove. Do not generate URDF into source.
 
-In a ROS development environment, build and validate with:
+Build and validate in the isolated container environment with:
 
 ```bash
 make build
-source install/setup.bash
-check_urdf "$(ros2 pkg prefix tank_description)/share/tank_description/urdf/robot.urdf"
 make test
 ```
 
 The description tests check wheel/enclosure orientation, compare the build artifact
 with fresh Xacro output, and parse it with `check_urdf`. No robot nodes are launched.
-Container build/test commands arrive in migration phase 3.
+See [container operation](CONTAINERS.md); robot startup remains gated until phase 4.
 
 Check visually that:
 
@@ -79,6 +77,9 @@ Check visually that:
 - The model moves red-end-first when odometry X increases.
 
 ## 2. Establish the TF tree
+
+Run the following `ros2` diagnostics inside `make shell` against an already
+running robot container after phase 4. They do not start another launch process.
 
 SLAM Toolbox needs this complete chain at the timestamp of every scan:
 
@@ -195,11 +196,9 @@ The bringup launch includes:
 - lifecycle management
 - Foxglove bridge
 
-Build and launch:
+Build and launch (robot startup is gated until phase 4):
 
 ```bash
-source /opt/ros/jazzy/setup.bash
-source ros_venv/bin/activate
 make build
 make launch
 ```

@@ -5,9 +5,9 @@ coordinate conventions, and SLAM diagnostics, use the
 [encoder-to-SLAM guide](slam-mapping-guide.md). For saved-map localization,
 reviewed navigation goals, and cancellation, use [NAVIGATION](NAVIGATION.md).
 
-The launch commands below describe the retained native Pi workflow. They are not
-yet a VENTUNO deployment procedure. See [migration status](VENTUNO_MIGRATION.md)
-and run robot processes yourself from your terminal once hardware is connected.
+Make targets now use containers. Robot startup remains gated until phase 4; see
+[container operation](CONTAINERS.md) and [migration status](VENTUNO_MIGRATION.md).
+Run robot processes yourself after hardware is connected and validated.
 
 ## ROS data and frame ownership
 
@@ -24,7 +24,7 @@ Do not run SLAM and AMCL as competing `map -> odom` publishers.
 
 ## Build and save an occupancy map
 
-In an existing native ROS installation, `make launch` starts the mapping stack.
+After phase 4 enables startup, `make launch` starts the mapping stack in Compose.
 Drive slowly through the area, revisiting distinctive locations for loop closure.
 Check `/scan`, `/odom`, `/tf`, `/tf_static`, `/map`, and `/map_metadata` in Foxglove.
 
@@ -62,17 +62,13 @@ Polygons alone support room identification; navigation requires `navigate_pose`.
 Choose it on checked free space with clearance for the robot. The agent does not
 use a polygon centroid as an automatic navigation goal.
 
-Install updated labels in the existing native workspace with:
-
-```bash
-colcon build --packages-select senses --symlink-install
-source install/setup.bash
-```
-
-Then ask the agent to reload room labels. Room markers start with senses and
-publish `/visualization_marker_array` in the `map` frame. Use
-`make publish-room-markers ROOMS_CONFIG=maps/house.rooms.yaml` to publish an
-alternate labels file manually.
+Room/voice YAML is mounted read-only into the ROS container under `/config/senses`.
+Edit `src/senses/config/rooms.yaml` and ask the agent to reload labels after the
+phase-4 runtime is enabled; ordinary label edits need no image rebuild.
+Room markers start with senses and publish `/visualization_marker_array` in the
+`map` frame. To use the saved alternate labels file, prepare persistent maps and
+run `make publish-room-markers ROOMS_CONFIG=/maps/house.rooms.yaml` against the
+existing robot container. See [container operation](CONTAINERS.md).
 
 ## Navigation and troubleshooting
 

@@ -1,22 +1,10 @@
-# Legacy Pi vendor overlay
+# Container vendor overlay
 
-> This is the existing Raspberry Pi setup, not a VENTUNO installation step.
-> Phase 3 of the [migration](VENTUNO_MIGRATION.md) will build pinned vendor
-> dependencies inside the ROS container instead of requiring `~/vendor_ws`.
+The ROS image imports [vendor.repos](../vendor.repos) and builds `sllidar_ros2`
+inside `/opt/vendor`. Its commit is immutable; no `~/vendor_ws` or host dependency
+installation is required. The image entrypoint sources vendor and robot overlays.
 
-A vendor overlay gives us the ability to build ros2 packages from source and make them available to our main (underlay)
-
-Currently we just have sllidar in the vendor overlay, but we could add more in the future
-
-## Create and build the vendor overlay
-
-```
-mkdir -p ~/vendor_ws/src
-cd ~/vendor_ws/src
-git clone https://github.com/Slamtec/sllidar_ros2.git
-
-cd ~/vendor_ws
-source /opt/ros/jazzy/setup.bash
-rosdep install --from-paths src --ignore-src -y -r
-colcon build --symlink-install
-```
+Run `make build` and `make test`; see [container operation](CONTAINERS.md).
+Update the source SHA deliberately and validate the new driver before accepting it.
+Historical Pi workspace instructions are available in the
+[Pi baseline](https://github.com/jameselsey/robotics/blob/8100627c087d5cc25e0c40bdf27b5d8a42e131bf/docs/VENDOR_OVERLAY.md).

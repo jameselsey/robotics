@@ -1,0 +1,12 @@
+# Opt-in credentials only. The local ROS service never receives this mount.
+services:
+  ros-nova:
+    environment:
+      AWS_SHARED_CREDENTIALS_FILE: /run/aws/credentials
+      AWS_CONFIG_FILE: /run/aws/config
+    volumes:
+      - type: bind
+        source: ${AWS_DIR:-${HOME}/.aws}
+        target: /run/aws
+        read_only: true
+        bind: {create_host_path: false}

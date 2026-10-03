@@ -1,113 +1,54 @@
-.PHONY: clean build test health launch launch-navigation launch-localized launch-joystick launch-senses launch-senses-desk venv rviz build-rviz save-map publish-room-markers navigation-log calibrate-angular docker build-docker
-
-# Virtual environment setup
-VENV_DIR = ros_venv
-VENV_PYTHON = $(VENV_DIR)/bin/python3
-VENV_PIP = $(VENV_DIR)/bin/pip
-VENV_ACTIVATE = . $(VENV_DIR)/bin/activate
-ROS_SETUP ?= /opt/ros/jazzy/setup.bash
-VENDOR_SETUP ?= $(HOME)/vendor_ws/install/setup.bash
-ROS_STATE_DIR ?= $(if $(ROS_HOME),$(ROS_HOME),$(HOME)/.ros)
-NAVIGATION_LOG ?= $(ROS_STATE_DIR)/robopi/navigation_events.jsonl
+.DEFAULT_GOAL := help
+# Share the already-built legacy cache on this storage-limited board.
+# Override with DOCKER_BUILDKIT=1 on a host with room for a fresh BuildKit cache.
+export DOCKER_BUILDKIT ?= 0
+COMPOSE ?= docker compose
+BASE = -f docker-compose.yml
+HARDWARE = $(BASE) -f compose.hardware.yaml
+NOVA = $(HARDWARE) -f compose.nova.yaml
+ROS_SERVICE ?= ros
+ROS_EXEC = $(COMPOSE) $(BASE) exec $(ROS_SERVICE) /opt/robot/bin/entrypoint.sh
 ARGS ?=
 MAP_NAME ?= house
-MAP_DIR ?= maps
 MAP_TOPIC ?= /map
-MAP_WAIT_TIMEOUT ?= 15
 MAP_SAVE_TIMEOUT ?= 10.0
-ROOMS_CONFIG ?= src/senses/config/rooms.yaml
+ROOMS_CONFIG ?= /config/senses/rooms.yaml
 
-# ROS2 log formatting - human-readable timestamps
-export RCUTILS_CONSOLE_OUTPUT_FORMAT=[{severity}] [{time}] [{name}]: {message}
-export RCUTILS_COLORIZED_OUTPUT=1
+.PHONY: help prepare preflight config build build-docker test lint lint-code \
+	setup-models inference launch launch-navigation launch-localized launch-nova \
+	status logs health shell save-map publish-room-markers navigation-log calibrate-angular \
+	build-rviz rviz
 
-venv:
-	@if [ ! -d "$(VENV_DIR)" ]; then \
-		echo "🔧 Creating virtual environment with system site packages..."; \
-		python3 -m venv --system-site-packages $(VENV_DIR); \
-		touch $(VENV_DIR)/COLCON_IGNORE; \
-		$(VENV_PIP) install -U pip wheel setuptools; \
-		echo "📦 Installing Python dependencies from requirements.txt..."; \
-		$(VENV_PIP) install -r requirements.txt; \
-		echo "✅ Virtual environment ready."; \
-	else \
-		echo "✅ Virtual environment already exists."; \
-	fi
+help:
+	@echo "prepare/config/build/test: hardware-independent setup and checks"
+	@echo "setup-models: download ASR/TTS into project runtime folders (internet required)"
+	@echo "inference: local services in foreground; Ctrl-C stops this stack"
+	@echo "launch[-navigation|-localized|-nova]: foreground robot (gated until phase 4)"
+	@echo "status/logs/health/shell: diagnostics; rviz: optional Linux GUI tool"
 
-clean:
-	rm -rf build/ install/ log/
+prepare:
+	python3 tools/prepare.py
 
-clean-venv:
-	rm -rf $(VENV_DIR)
-	@echo "🗑️  Virtual environment removed."
+preflight:
+	python3 tools/preflight.py --mode build
 
-install-deps: venv
-	@echo "📦 Installing ROS2 system dependencies via rosdep..."
-	PIP_BREAK_SYSTEM_PACKAGES=1 rosdep install -yr --from-paths . --as-root pip:false
+config:
+	$(COMPOSE) $(BASE) --profile '*' config --quiet
+	$(COMPOSE) $(NOVA) --profile '*' config --quiet
+
+build: preflight config
+	$(COMPOSE) $(BASE) build ros
+	$(COMPOSE) $(BASE) build checks
+
+build-docker: build
 
 test:
-	@bash -c "source $(ROS_SETUP) && source $(VENV_DIR)/bin/activate && source install/setup.bash && colcon test --event-handlers console_direct+ && colcon test-result --verbose"
+	$(COMPOSE) $(BASE) run --rm --no-deps checks
 
-health:
-	@bash -c "source $(ROS_SETUP) && source install/setup.bash && timeout 8 ros2 topic echo /foxglove_health --once --full-length"
+lint:
+	$(COMPOSE) $(BASE) run --rm --no-deps checks make lint-code
 
-build:
-	@bash -c "source $(ROS_SETUP) && $(VENV_ACTIVATE) && colcon build --symlink-install"
-
-launch-joystick:
-	@bash -c "$(VENV_ACTIVATE) && source install/setup.bash && source $(VENDOR_SETUP) && ros2 launch joystick joystick.launch.py"
-
-launch-drive:
-	@bash -c "$(VENV_ACTIVATE) && source install/setup.bash && source $(VENDOR_SETUP) && ros2 launch drive_controller drive_controller.launch.py"
-
-launch-senses:
-	@bash -c "source $(ROS_SETUP) && source install/setup.bash && source $(VENDOR_SETUP) && ros2 launch senses senses.launch.py"
-
-launch-senses-desk:
-	@echo "Launching senses without LiDAR for desk testing."
-	@bash -c "source $(ROS_SETUP) && source install/setup.bash && source $(VENDOR_SETUP) && ros2 launch senses senses.launch.py enable_lidar:=false"
-
-launch:
-	@flock -n -E 73 /tmp/robopi-bringup.lock bash -c "$(VENV_ACTIVATE) && source install/setup.bash && source $(VENDOR_SETUP) && ros2 launch bringup all.launch.py $(ARGS)" || { status=$$?; if [ $$status -eq 73 ]; then echo "RoboPi bringup is already running; stop it before launching another instance."; fi; exit $$status; }
-
-launch-navigation:
-	@flock -n -E 73 /tmp/robopi-bringup.lock bash -c "$(VENV_ACTIVATE) && source install/setup.bash && source $(VENDOR_SETUP) && ros2 launch bringup all.launch.py enable_navigation:=true $(ARGS)" || { status=$$?; if [ $$status -eq 73 ]; then echo "RoboPi bringup is already running; stop it before launching another instance."; fi; exit $$status; }
-
-launch-localized:
-	@test -f "$(MAP_DIR)/$(MAP_NAME).yaml" || (echo "Missing saved map: $(MAP_DIR)/$(MAP_NAME).yaml" && exit 1)
-	@flock -n -E 73 /tmp/robopi-bringup.lock bash -c "$(VENV_ACTIVATE) && source install/setup.bash && source $(VENDOR_SETUP) && ros2 launch bringup all.launch.py use_saved_map:=true enable_navigation:=true saved_map_file:=$(abspath $(MAP_DIR)/$(MAP_NAME).yaml) $(ARGS)" || { status=$$?; if [ $$status -eq 73 ]; then echo "RoboPi bringup is already running; stop it before launching another instance."; fi; exit $$status; }
-
-save-map:
-	@mkdir -p $(MAP_DIR)
-	@echo "Saving SLAM map to $(MAP_DIR)/$(MAP_NAME).yaml and $(MAP_DIR)/$(MAP_NAME).pgm"
-	@bash -c "source $(ROS_SETUP) && source install/setup.bash && ros2 lifecycle set /slam_toolbox configure >/dev/null 2>&1 || true && ros2 lifecycle set /slam_toolbox activate >/dev/null 2>&1 || true && timeout $(MAP_WAIT_TIMEOUT) bash -c 'until ros2 topic echo $(MAP_TOPIC) --once >/dev/null 2>&1; do sleep 1; done' && ros2 run nav2_map_server map_saver_cli -t $(MAP_TOPIC) -f $(MAP_DIR)/$(MAP_NAME) --ros-args -p save_map_timeout:=$(MAP_SAVE_TIMEOUT)"
-
-publish-room-markers:
-	@bash -c "source $(ROS_SETUP) && source install/setup.bash && ros2 run senses room_markers --ros-args -p rooms_config_path:=$(ROOMS_CONFIG)"
-
-navigation-log:
-	@mkdir -p "$(dir $(NAVIGATION_LOG))"
-	@touch "$(NAVIGATION_LOG)"
-	@tail -n 100 -f "$(NAVIGATION_LOG)"
-
-calibrate-angular:
-	@bash -c "source $(ROS_SETUP) && source install/setup.bash && ros2 run drive_controller calibrate_angular --config src/drive_controller/config/drive_controller.yaml"
-
-docker:
-	# Legacy convenience target: starts the wake-word service, not ROS.
-	docker compose up -d
-
-build-docker:
-	docker compose build --no-cache
-
-build-rviz:
-	docker compose build rviz
-
-rviz:
-	@echo "Starting RViz in Docker. On macOS, start XQuartz and run: xhost +localhost"
-	DISPLAY=$${DISPLAY:-host.docker.internal:0} docker compose --profile tools run --rm rviz
-
-# Temporary host tooling or the phase-3 build image may provide Ruff.
+# Internal test-image target; requires no host Python/ROS environment.
 RUFF ?= ruff
 LINT_FILES = src/senses/senses/voice_agent.py src/senses/senses/voice_config.py \
 	src/senses/senses/nova_backend.py src/senses/senses/conversation_session.py \
@@ -115,8 +56,61 @@ LINT_FILES = src/senses/senses/voice_agent.py src/senses/senses/voice_config.py 
 	src/senses/test/test_conversation_session.py src/senses/launch \
 	src/bringup/launch/all.launch.py src/bringup/launch/localization.launch.py \
 	src/bringup/test src/tank_description/test src/senses/setup.py \
-	src/drive_controller/setup.py
-.PHONY: lint clean-venv install-deps launch-drive
-lint:
+	src/drive_controller/setup.py tools test docker/ros/robot-start.py
+lint-code:
 	$(RUFF) check $(LINT_FILES)
 	$(RUFF) format --check $(LINT_FILES)
+
+setup-models: prepare
+	$(COMPOSE) $(BASE) run --rm --no-deps download-asr
+	$(COMPOSE) $(BASE) run --rm --no-deps download-tts
+
+inference:
+	python3 tools/preflight.py --mode local
+	$(COMPOSE) $(BASE) --profile local-voice up
+
+launch:
+	python3 tools/preflight.py --mode robot
+	ROS_LAUNCH_ARGS="$(ARGS)" $(COMPOSE) $(HARDWARE) --profile robot up --abort-on-container-exit --exit-code-from ros
+
+launch-navigation:
+	@$(MAKE) launch ARGS="enable_navigation:=true $(ARGS)"
+
+launch-localized:
+	@test -f "runtime/maps/$(MAP_NAME).yaml" || (echo "Missing runtime/maps/$(MAP_NAME).yaml" && exit 1)
+	@$(MAKE) launch ARGS="use_saved_map:=true enable_navigation:=true saved_map_file:=/maps/$(MAP_NAME).yaml $(ARGS)"
+
+launch-nova:
+	python3 tools/preflight.py --mode nova
+	ROS_LAUNCH_ARGS="$(ARGS)" $(COMPOSE) $(NOVA) --profile nova up --abort-on-container-exit --exit-code-from ros-nova
+
+status:
+	$(COMPOSE) $(BASE) --profile '*' ps
+
+logs:
+	$(COMPOSE) $(BASE) --profile '*' logs --tail 100
+
+health:
+	$(ROS_EXEC) timeout 8 ros2 topic echo /foxglove_health --once --full-length
+
+shell:
+	$(ROS_EXEC) bash
+
+# Diagnostics/calibration reuse the existing ROS container, never launch another robot.
+save-map:
+	$(ROS_EXEC) ros2 run nav2_map_server map_saver_cli -t $(MAP_TOPIC) -f /maps/$(MAP_NAME) --ros-args -p save_map_timeout:=$(MAP_SAVE_TIMEOUT)
+
+publish-room-markers:
+	$(ROS_EXEC) ros2 run senses room_markers --ros-args -p rooms_config_path:=$(ROOMS_CONFIG)
+
+navigation-log:
+	@tail -n 100 -f runtime/state/ros/robopi/navigation_events.jsonl
+
+calibrate-angular:
+	$(ROS_EXEC) ros2 run drive_controller calibrate_angular --config /config/drive/drive_controller.yaml
+
+build-rviz:
+	$(COMPOSE) $(BASE) build rviz
+
+rviz:
+	$(COMPOSE) $(BASE) run --rm --no-deps rviz

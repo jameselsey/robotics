@@ -1,9 +1,10 @@
 # Semantic room context and navigation
 
-> The ROS behavior below is retained from the Pi implementation. These native
-> launch commands are not yet a VENTUNO deployment workflow; see the
-> [migration status](VENTUNO_MIGRATION.md). Launch processes yourself from your
-> terminal after connecting and validating the hardware.
+> The ROS behavior below is retained from the Pi implementation. Make targets
+> now use containers, but robot startup remains gated until phase 4 provides the
+> MCU/voice adapters. See [container operation](CONTAINERS.md) and the
+> [migration status](VENTUNO_MIGRATION.md). Launch from your own terminal after
+> connecting and validating hardware.
 
 RoboPi separates human map meaning from the occupancy map:
 

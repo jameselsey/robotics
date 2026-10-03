@@ -14,8 +14,7 @@ console entry points.
 
 `eyes.launch.py` runs the external `v4l2_camera` driver and `topic_tools` image
 throttle; no custom camera node is needed. Foxglove is launched by `bringup`, not
-by a separate workspace package. The LiDAR driver currently comes from the
-legacy external vendor workspace.
+by a separate workspace package. The LiDAR driver is built from the pinned `vendor.repos` inside the ROS image.
 
 Pi GPIO remains in the drive controller and voice LED adapter until phase 4.
 Package cleanup, containerization, and local inference integration are tracked
@@ -40,9 +39,9 @@ phase 4. Both acknowledgement sound effects remain installed.
 Python packages install ROS resources through `data_files`; ROS dependencies
 belong in `package.xml`, while the PyPI voice libraries remain in the root
 `requirements.txt`. CMake resource packages need no conversion to Python builds.
-`make lint` checks the phase-2 files incrementally with Ruff (tested with 0.15.1);
-`make test` runs the package tests in a prepared ROS development environment.
-The container toolchain becomes reproducible in phase 3.
+`make lint` checks the selected files incrementally in the test image with Ruff
+0.15.1; `make test` runs package/deployment tests and production import/resource
+checks without hardware. See [container operation](../docs/CONTAINERS.md).
 
 ## Deployment configuration
 
@@ -71,7 +70,7 @@ AWS profile/region, model selection, devices, and endpoints. Credentials stay in
 the AWS credential provider, never YAML. `navigation_log_path` can be set in the
 voice YAML; its default follows `$ROS_HOME/robopi/navigation_events.jsonl`.
 
-Native Make targets accept `ROS_SETUP`, `VENDOR_SETUP`, `ROS_STATE_DIR`, and
-`NAVIGATION_LOG` overrides. The vendor workspace and native venv workflow remain
-transitional until phase 3. Pi BCM numbers are historical configuration, not
+The Make targets now use Compose and the installed overlays, without host ROS
+or a vendor workspace. Runtime settings and state paths are defined in `.env`
+and Compose; see the container guide. Pi BCM numbers are historical configuration, not
 VENTUNO pin assignments; do not wire the VENTUNO using them.

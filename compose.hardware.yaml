@@ -1,0 +1,20 @@
+x-hardware: &hardware
+  devices:
+    - ${CAMERA_DEVICE:-/dev/video0}:/dev/video0
+    - ${LIDAR_DEVICE:-/dev/ttyUSB0}:/dev/ttyUSB0
+    - ${AUDIO_DEVICE_DIR:-/dev/snd}:/dev/snd
+    - ${INPUT_DEVICE_DIR:-/dev/input}:/dev/input
+  group_add:
+    - "${AUDIO_GID:-29}"
+    - "${VIDEO_GID:-44}"
+    - "${INPUT_GID:-996}"
+    - "${DIALOUT_GID:-20}"
+    - "${ROUTER_GID:-0}"
+  volumes:
+    - type: bind
+      source: ${ROUTER_SOCKET:-/var/run/arduino-router.sock}
+      target: /var/run/arduino-router.sock
+      bind: {create_host_path: false}
+services:
+  ros: *hardware
+  ros-nova: *hardware
