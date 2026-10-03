@@ -21,13 +21,6 @@ def generate_launch_description():
             name="v4l2_camera_node",
         ),
 
-        # Your node
-        Node(
-            package="senses",
-            executable="eyes",
-            name="eyes",
-        ),
-
         # Throttle <mode> <in> <rate> <out>
         Node(
             package="topic_tools",

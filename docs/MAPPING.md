@@ -1,73 +1,46 @@
-# Mapping and Room Annotation
+# Mapping and room annotation
 
-This robot uses the standard ROS 2 stack for mapping and navigation:
+This page covers occupancy maps and semantic room labels. For encoder calibration,
+coordinate conventions, and SLAM diagnostics, use the
+[encoder-to-SLAM guide](slam-mapping-guide.md). For saved-map localization,
+reviewed navigation goals, and cancellation, use [NAVIGATION](NAVIGATION.md).
 
-- `slam_toolbox` builds and maintains the `map` frame from `/scan`, `/odom`, and TF.
-- Nav2 accepts navigation goals through the `navigate_to_pose` action.
-- `senses/config/rooms.yaml` is the robot-specific semantic layer that gives human names to areas in the SLAM map.
+The launch commands below describe the retained native Pi workflow. They are not
+yet a VENTUNO deployment procedure. See [migration status](VENTUNO_MIGRATION.md)
+and run robot processes yourself from your terminal once hardware is connected.
 
-The important frame chain is:
+## ROS data and frame ownership
 
 ```text
 map -> odom -> base_link -> laser
 ```
 
-`odom -> base_link` comes from the drive controller, `map -> odom` comes from SLAM Toolbox, and `base_link -> laser` is published by `bringup/launch/slam.launch.py`.
+- SLAM Toolbox publishes `map -> odom` while mapping; AMCL owns it in saved-map mode.
+- The drive controller publishes encoder `/odom` and `odom -> base_link`.
+- `bringup/launch/all.launch.py` publishes the static `base_link -> laser` transform.
+- LiDAR publishes `/scan`; Foxglove shows scans, TF, `/map`, and room markers.
 
-## 1. Start Mapping on the Robot
+Do not run SLAM and AMCL as competing `map -> odom` publishers.
 
-On the Pi:
+## Build and save an occupancy map
 
-```bash
-cd ~/robotics
-source /opt/ros/jazzy/setup.bash
-source install/setup.bash
-make launch
-```
+In an existing native ROS installation, `make launch` starts the mapping stack.
+Drive slowly through the area, revisiting distinctive locations for loop closure.
+Check `/scan`, `/odom`, `/tf`, `/tf_static`, `/map`, and `/map_metadata` in Foxglove.
 
-`make launch` starts the normal robot stack plus SLAM Toolbox. In Foxglove or RViz, you should see:
-
-- `/scan`
-- `/map`
-- `/map_metadata`
-- `/tf`
-- `/tf_static`
-- `/odom`
-
-Drive the robot slowly around the house so SLAM Toolbox can build up the occupancy grid. Loop closures improve if you return through areas it has already seen.
-
-## 2. Save the Occupancy Map
-
-When the map looks good in Foxglove, save it from the Pi:
+When satisfied, use:
 
 ```bash
-make save-map
+make save-map MAP_NAME=house
 ```
 
-That creates:
+This saves `maps/house.yaml` and `maps/house.pgm`. Override `MAP_NAME` or `MAP_DIR`
+for another map. The map YAML and image describe occupancy, not room names.
 
-```text
-~/robotics/maps/house.yaml
-~/robotics/maps/house.pgm
-```
+## Annotate named rooms
 
-These files are the occupancy map. They are not the room labels yet. Override the
-name if you want another output file:
-
-```bash
-make save-map MAP_NAME=downstairs
-```
-
-## 3. Annotate Rooms Manually
-
-Copy the saved map files to your Mac, annotate them however you prefer, then copy
-the resulting room labels back into:
-
-```text
-~/robotics/src/senses/config/rooms.yaml
-```
-
-The room label format is:
+The default labels live in `src/senses/config/rooms.yaml`. A room combines a
+polygon for location questions with an explicitly reviewed pose for navigation:
 
 ```yaml
 frame_id: map
@@ -85,75 +58,29 @@ rooms:
       yaw: 0.0
 ```
 
-The `polygon` is used for questions like "what room are you in?". The optional
-`navigate_pose` is used for commands like "navigate to the bedroom".
+Polygons alone support room identification; navigation requires `navigate_pose`.
+Choose it on checked free space with clearance for the robot. The agent does not
+use a polygon centroid as an automatic navigation goal.
 
-After copying the edited labels back to the Pi, rebuild the `senses` package:
+Install updated labels in the existing native workspace with:
 
 ```bash
 colcon build --packages-select senses --symlink-install
 source install/setup.bash
 ```
 
-Then say: "reload room labels".
+Then ask the agent to reload room labels. Room markers start with senses and
+publish `/visualization_marker_array` in the `map` frame. Use
+`make publish-room-markers ROOMS_CONFIG=maps/house.rooms.yaml` to publish an
+alternate labels file manually.
 
-## 4. Publish Room Markers
+## Navigation and troubleshooting
 
-Publish the annotated room polygons and labels for Foxglove:
+`make launch-navigation` enables Nav2 with the live SLAM map.
+`make launch-localized` loads the saved map with AMCL and Nav2 instead.
+Follow [NAVIGATION](NAVIGATION.md) for initialization and first-goal checks.
 
-```bash
-make publish-room-markers
-```
-
-This publishes `visualization_msgs/msg/MarkerArray` messages on:
-
-```text
-/visualization_marker_array
-```
-
-In Foxglove, add a `3D` panel and enable the marker array topic. The publisher
-uses the `map` frame by default, so SLAM must be running and publishing `map`.
-
-Use a different labels file if needed:
-
-```bash
-make publish-room-markers ROOMS_CONFIG=/home/jelsey/robotics/src/senses/config/rooms.yaml
-```
-
-## 5. Start Nav2 Navigation
-
-Nav2 is installed but not started by default. Start it when you are ready to send autonomous goals:
-
-```bash
-make launch ARGS="enable_navigation:=true"
-```
-
-If your current Makefile does not pass `ARGS`, use the direct command:
-
-```bash
-source /opt/ros/jazzy/setup.bash
-source install/setup.bash
-source ~/vendor_ws/install/setup.bash
-ros2 launch bringup all.launch.py enable_navigation:=true
-```
-
-Once Nav2 is running, the voice agent can use the room annotations for questions
-and navigation. Try:
-
-```text
-What rooms are available?
-What room are you in?
-Tell me about room 1.
-Can you navigate to the bedroom?
-```
-
-For navigation, a room-specific `navigate_pose` is preferred. If a room only has
-a polygon, the voice agent falls back to the polygon centre as the Nav2 goal.
-
-## Troubleshooting
-
-If `what room are you in?` says there is no `map -> base_link` transform, SLAM has not published a map transform yet. Check `/scan`, `/odom`, and TF first.
-
-If Nav2 says the action server is not running, start with `enable_navigation:=true` and wait for the Nav2 lifecycle nodes to activate.
-
-If room detection gives the wrong label, inspect the clicked polygon order and make sure the points enclose the room without crossing over themselves.
+If room lookup lacks `map -> base_link`, inspect scan, odometry, localization,
+and TF before changing labels. If the Nav2 action server is unavailable, verify
+its lifecycle activation. If labels are wrong, check polygon coordinates and
+edge ordering against the selected occupancy map.

@@ -1,5 +1,9 @@
 # ROS 2 workspace maintenance audit
 
+> Historical audit of the Raspberry Pi workspace on 2026-08-22. Its observations
+> and roadmap describe that version, not completed VENTUNO support. The current
+> plan and progress are tracked in [VENTUNO migration](VENTUNO_MIGRATION.md).
+
 Date: 2026-08-22
 ROS distribution: Jazzy
 Workspace: RoboPi `~/robotics`

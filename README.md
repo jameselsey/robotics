@@ -1,63 +1,89 @@
 # robotics
-A collection of robotics projects that I have been tinkering with to learn more.
+
+R2 is a ROS 2 tank robot built to explore electronics, perception, voice agents,
+mapping, and navigation.
+
+> **VENTUNO Q migration in progress.** Development continues on `main`, one
+> reviewable phase at a time. See the [migration plan and progress](docs/VENTUNO_MIGRATION.md).
+> The board is not yet connected to the robot; the current checkout is not a
+> working VENTUNO deployment.
+>
+> **Looking for the Raspberry Pi 5 version?** The original code and instructions
+> are preserved at [the Pi baseline commit](https://github.com/jameselsey/robotics/tree/8100627c087d5cc25e0c40bdf27b5d8a42e131bf).
+> The planned archive tag is `pi5-final`; its creation and push are a user-owned
+> step documented in the migration guide.
 
 ![R2 Front](img/r2.jpg)
 ![R2 Back](img/r2-back.jpg)
 
-# Features
+## Existing robot capabilities
 
-* Drive it around manually using an Xbox controller
-* Visualise data, lidar, camera views in Foxglove
-* Speech to Text (STT) and wake word detection using OpenAI Whisper and Porcupine
-* Onboard LLM! It has Ollama running inside docker, using the TinyLlama model. Any voice commands will be sent into the LLM
-* Text to speech (TTS), any responses from the LLM will be voiced back to you, so you can have conversations!
-* Lidar, it'll map the surrounds
-* More features coming!
+The Pi implementation provides:
 
-# How to install
-(this will become much easier when I find the time to Docker-ise it, but for now, we'll just install directly onto the host system)
+- Manual driving with an Xbox controller and quadrature encoder odometry.
+- Foxglove visualization of the robot, camera, LiDAR, maps, transforms, and diagnostics.
+- Wake-word and controller-triggered conversations through a Strands/Nova Sonic voice agent.
+- Spoken responses and LED feedback, camera questions through Nova Lite, and robot tools.
+- SLAM mapping, saved-map localization, semantic room annotations, and Nav2 navigation.
 
-The instructions are quite long, see the [INSTALL](docs/INSTALL.md) for the full instructions.
+The VENTUNO migration will retain these capabilities while moving Linux
+application dependencies into Docker Compose and GPIO duties to the STM32.
+Local Whisper, GenieX, and Piper services will become the default voice backend;
+Nova will remain selectable. These changes are planned, not implemented yet.
 
+## Installation and operation
 
-# How to run
-I've made it very easy to run the robot:
+Read [installation status](docs/INSTALL.md) before installing dependencies.
+For the complete original Pi setup, use the baseline link above.
+
+The retained native ROS workflow still uses:
+
 ```bash
 make build
 make launch
 ```
 
-You can also run individual packages such as `make launch-senses` if you wanted to run a single subsystem.
+It requires an existing ROS 2 Jazzy installation, Python environment, vendor
+workspace, and Pi hardware configuration. It is not ready to run the robot on
+VENTUNO. Container build and startup commands will replace this setup in phase 3.
 
-It'll run the foxglove bridge too, so point that at `ws://pi5:8765` and you'll see this
+The current Compose file runs the wake-word service and optional RViz tooling;
+it does not yet run ROS or local inference. Launch and stop robot processes from
+your own terminal so you retain Ctrl-C control.
+
+Once the robot is running, connect Foxglove from a Mac on the same network to
+`ws://<robot-hostname-or-IP>:8765`. The final VENTUNO connection and acceptance
+checks will be documented during the migration.
 
 ![Foxglove](img/foxglove2.png)
 
-It isn't particularly useful on it's own, so run the "bringup" which will launch all components, so you can control it and see sensor data etc
+## Project documentation
 
-# Parts List
-Here is a list of the parts I used. Aside from the Pi and the Logitech webcam, everything else I got from AliExpress.
-See the [HARDWARE](docs/HARDWARE.md) page for more info about the build.
+- [ROS packages](src/README.md)
+- [Hardware build photographs and Pi chassis notes](docs/HARDWARE.md)
+- [Camera and voice vision](docs/CAMERA.md)
+- [Mapping and room annotation](docs/MAPPING.md)
+- [Encoder calibration and SLAM diagnostics](docs/slam-mapping-guide.md)
+- [Localization and navigation](docs/NAVIGATION.md)
+- [Historical ROS maintenance audit](docs/ros2-maintenance-audit.md)
 
-- Xiaor geek tank chassis
-- 2 x JGA25-371 12V DC Gear Motor Encoder, 280rpm
-- Raspberry Pi 5
-- Logitech Brio100 webcam
-- Cheap USB speakers from AliExpress
-- Xbox controller (this must be one of the newer, bluetooth / USB-C models. The OG xbox one controllers had a proprietary wireless protocol)
-- Cheap Buck converters from AliExpress to step down the 18v to 12v for the motors and 5v for the pi, and 3.3v for LEDs / motor encoders
-- 2 x BTS7960 H bridge motor drivers
-- 150mm x 150mm acrylic sheets to make the layers of the robot stack
-- Various m3 spacers, smaller 10mm for holding PCBs, then 50-75mm to space the layers depending on whats in them
-- Dupont cables, box of JST-XH connectors, 14awg for the batteries/motors, 22awg elsewhere
-- Googly eyes
+## Hardware
 
+The existing chassis uses:
 
-# Why am I building this?
-Mostly curiosity, and I enjoy tinkering with things and solving hard problems. Robotics gives me a fantastic platform to explore and learn:
-* Electronics, hardware design, and soldering
-* Software, ros2, python, c++
-* Computer vision, machine learning, and AI
-* SLAM, navigation, and autonomy
-* Visualisation and simulators
-* CAD and 3d printing (for when R2 eventually gets a new body)
+- Xiaor Geek tank chassis with two JGA25-371 12 V encoder gear motors, 280 rpm.
+- Two BTS7960 H-bridge motor drivers.
+- Raspberry Pi 5, being replaced by Arduino VENTUNO Q.
+- USB LiDAR, Logitech Brio 100 webcam/microphone, and USB speakers.
+- Xbox controller with Bluetooth/USB support.
+- Ryobi 18 V battery and buck converters for the original Pi installation.
+- Acrylic layers, M3 spacers, JST-XH connectors, wiring, and googly eyes.
+
+The photographs and existing power arrangements describe the Pi build. VENTUNO
+power requirements and verified motor/encoder/LED pin assignments will be
+provided in phase 4 before rewiring.
+
+## Why build this?
+
+Mostly curiosity, and the opportunity to learn electronics, hardware design,
+soldering, Python, ROS 2, computer vision, AI, SLAM, navigation, CAD, and 3D printing.

@@ -1,4 +1,11 @@
 # Hardware
+
+> These photographs, power arrangements, and build notes describe the Raspberry
+> Pi chassis. The VENTUNO has not been wired to the robot. Do not use the Pi power
+> or GPIO arrangement as a VENTUNO wiring guide; verified wiring and pin
+> assignments will be documented in phase 4 of the
+> [migration](VENTUNO_MIGRATION.md).
+
 The hardware is evolving as I add new features and improvements, I wanted to make it as modular as possible so I can add new layers and move modules around.
 
 ## Chassis

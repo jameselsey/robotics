@@ -1,5 +1,10 @@
 # From wheel encoders to a ROS 2 SLAM map
 
+> This guide records the Raspberry Pi calibration and native ROS workflow.
+> Its geometry and diagnostic checks remain useful; VENTUNO startup and wiring
+> are pending the [migration](VENTUNO_MIGRATION.md). Run launch/restart steps
+> yourself from your terminal, after the hardware is connected and checked.
+
 This guide documents the working RoboPi mapping stack and the calibration path used to reach it. It is also structured as a practical outline for a YouTube walkthrough.
 
 ## What the finished system does
@@ -37,7 +42,7 @@ For this robot:
 - Positive encoder travel must increase odometry X when both tracks move forward.
 - The LiDAR transform must make an obstacle physically in front appear at the red-wheel end of the model.
 
-The RPLIDAR is mounted 180 degrees relative to the corrected `base_link` axis, so `slam.launch.py` uses a laser yaw of π radians. This does not reverse scan data arbitrarily; it describes the real sensor mounting relative to the ROS frame.
+The RPLIDAR is mounted 180 degrees relative to the corrected `base_link` axis, so `all.launch.py` defaults to a laser yaw of π radians. This does not reverse scan data arbitrarily; it describes the real sensor mounting relative to the ROS frame.
 
 A mismatch here can look deceptively plausible in a robot-relative scan panel while destroying the map. SLAM will try to reconcile scans that imply motion in one direction with odometry that claims the opposite direction, producing large `map -> odom` corrections, duplicated walls, or apparent backward travel.
 
@@ -86,7 +91,7 @@ Ownership is deliberately split:
 
 - SLAM Toolbox publishes `map -> odom`.
 - `drive_controller` publishes `odom -> base_link`.
-- `slam.launch.py` publishes the static `base_link -> laser` transform.
+- `all.launch.py` publishes the static `base_link -> laser` transform.
 
 Useful checks:
 

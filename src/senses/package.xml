@@ -21,23 +21,14 @@
   <exec_depend>visualization_msgs</exec_depend>
 
   <exec_depend>python3-numpy</exec_depend>
-  <exec_depend>python3-soundfile</exec_depend>
   <exec_depend>python3-pyaudio</exec_depend>
-  <exec_depend>python3-pvporcupine-pip</exec_depend>
-  <exec_depend>python3-openai-whisper-pip</exec_depend>
   <exec_depend>python3-playsound-pip</exec_depend>
-  <exec_depend>python3-pyttsx3-pip</exec_depend>
-  <exec_depend>python3-piper-tts-pip</exec_depend>
-  <exec_depend>python3-sounddevice-pip</exec_depend>
-  <exec_depend>openwakeword-pip</exec_depend>
   <exec_depend>strands-agents</exec_depend>
   <exec_depend>strands-agents-tools</exec_depend>
   <exec_depend>python3-boto3</exec_depend>
   <!-- aws-sdk-bedrock-runtime is installed from requirements.txt; it has no rosdep key. -->
 
   <test_depend>python3-pytest</test_depend>
-
-  <test_depend>python-gc9d01-library-pip</test_depend>
 
   <export>
     <build_type>ament_python</build_type>

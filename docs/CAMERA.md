@@ -1,92 +1,43 @@
-# Cameras
-I'm using the Logitech BRIO 100 camera, it's an inexpensive USB camera and includes an on-board mic.
+# Camera and voice vision
 
-The camera is compatible with the [v4l drivers](https://index.ros.org/r/v4l2_camera/#jazzy)
+The Logitech Brio 100 is a USB camera with an integrated microphone.
 
-## Performance Improvements
-If you install this package, it will automatically create a new topic called `/image_raw/compressed`
+## Camera topics and Foxglove
 
-```
-sudo apt-get install ros-${ROS_DISTRO}-image-transport-plugins
-```
+`src/senses/launch/eyes.launch.py` starts the external `v4l2_camera` driver and
+`topic_tools` throttle. The removed custom `eyes` node only logged startup; it
+performed no capture or processing.
 
-If we publish this as is, then we'll likely see this output on the foxglove bridge
-```
-foxglove_bridge-3] [WARN] [1757674243.951852798] [foxglove_bridge]: [WS] 192.168.0.18:59453: Send buffer limit reached
-[foxglove_bridge-3] [WARN] [1757674248.558986138] [foxglove_bridge]: [WS] 192.168.0.18:59453: Send buffer limit reached
-[foxglove_bridge-3] [WARN] [1757674251.067843415] [foxglove_bridge]: [WS] 192.168.0.18:59453: Send buffer limit reached
-```
-
-This is likely because the image data is too large and becomes a bottle neck.
-
-We can work around this creating a new topic that is a throttled version of the `/image_raw/compressed` topic, like this
-
-First install this if you havent
-```
-sudo apt install ros-jazzy-topic-tools
-```
-
-Then you'll be able to use the throttle nodes
-
-```
-        # Declare args (must be part of the LaunchDescription)
-        DeclareLaunchArgument("image_in",          default_value="/image_raw/compressed"),
-        DeclareLaunchArgument("image_viz",         default_value="/image_viz/compressed"),
-        DeclareLaunchArgument("image_viz_rate_hz", default_value="3.0"),
-
-        # Throttle <mode> <in> <rate> <out>
-        Node(
-            package="topic_tools",
-            executable="throttle",
-            name="image_throttle",
-            arguments=["messages", image_in, image_rate, image_viz],
-            output="screen",
-        ),
-```        
-
-Then, in the foxglove bridge, we can use the whitelist to include the `/image_viz/compressed` topic and leave out the other `/image_raw` topics, like this
-
-```
-    # Define the foxglove_bridge node
-    foxglove_bridge_node = Node(
-        package='foxglove_bridge',
-        executable='foxglove_bridge',
-        name='foxglove_bridge',
-        output='screen',
-        parameters=[{
-            'port': 8765,
-            'use_compression': True,
-            'max_qos_depth': 1,
-            'send_buffer_limit_bytes':67108864,
-            # Expose only these topics to Foxglove (ECMAScript regex)
-            "topic_whitelist": [
-                r"^(.*/)?image_viz/compressed$",
-            ],
-        }]
-    )
-```
-
-## Voice Agent Vision
-
-The voice agent can answer visual questions by taking the latest still frame from
-the throttled camera topic and sending it to Amazon Bedrock Nova Lite.
-
-Default settings:
+The retained camera path is:
 
 ```text
-vision_topic=/image_viz/compressed
-vision_model_id=amazon.nova-lite-v1:0
+v4l2_camera -> /image_raw/compressed
+           -> image_throttle -> /image_viz/compressed
 ```
 
-Example questions:
+Compressed images require the image-transport plugins in the ROS environment.
+The launch defaults are:
 
-```text
-What can you see?
-What am I holding?
-What is in my left hand?
-Describe the scene in front of you.
-```
+| Argument | Default |
+| --- | --- |
+| `image_in` | `/image_raw/compressed` |
+| `image_viz` | `/image_viz/compressed` |
+| `image_viz_rate_hz` | `3.0` |
 
-The tool uses the latest `sensor_msgs/msg/CompressedImage` frame and calls
-Bedrock Runtime with the configured AWS profile and region used by the voice
-agent. It is intended for still-frame visual Q&A, not continuous video analysis.
+The throttle limits visualization traffic. The Foxglove bridge exposes
+`/image_viz/compressed` and camera-info topics through its topic whitelist.
+Bridge settings belong to `src/bringup/launch/all.launch.py`; use that file as
+the current configuration rather than copying an older tuning example.
+
+## Current voice vision
+
+The Nova voice agent subscribes to the latest `sensor_msgs/msg/CompressedImage`
+on `/image_viz/compressed` and sends still-frame questions to Bedrock Nova Lite.
+Its default model is `amazon.nova-lite-v1:0`; AWS profile and region are shared
+with the voice agent. Example questions include "What can you see?" and
+"What am I holding?". This is still-frame Q&A rather than continuous analysis.
+
+The [VENTUNO migration](VENTUNO_MIGRATION.md) will add GenieX vision for the local
+backend while retaining Nova as an option. Camera device configuration and ROS
+packages will be included in the container deployment. Hardware and Mac/Foxglove
+checks remain pending; see [installation status](INSTALL.md).

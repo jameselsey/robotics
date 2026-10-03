@@ -1,4 +1,4 @@
-.PHONY: clean build test health launch launch-navigation launch-localized launch-joystick launch-senses launch-senses-desk venv rviz build-rviz save-map publish-room-markers navigation-log calibrate-angular
+.PHONY: clean build test health launch launch-navigation launch-localized launch-joystick launch-senses launch-senses-desk venv rviz build-rviz save-map publish-room-markers navigation-log calibrate-angular docker build-docker
 
 # Virtual environment setup
 VENV_DIR = ros_venv
@@ -40,11 +40,6 @@ clean-venv:
 install-deps: venv
 	@echo "📦 Installing ROS2 system dependencies via rosdep..."
 	PIP_BREAK_SYSTEM_PACKAGES=1 rosdep install -yr --from-paths . --as-root pip:false
-
-install-oww:
-	@echo "📦 Installing openWakeWord in venv..."
-	$(VENV_PIP) install -U --no-deps "openwakeword>=0.6.0"
-	$(VENV_PIP) install -U onnxruntime numpy
 
 test:
 	@bash -c "source /opt/ros/jazzy/setup.bash && source $(VENV_DIR)/bin/activate && source install/setup.bash && colcon test --event-handlers console_direct+ && colcon test-result --verbose"
@@ -99,19 +94,11 @@ calibrate-angular:
 	@bash -c "source /opt/ros/jazzy/setup.bash && source install/setup.bash && ros2 run drive_controller calibrate_angular --config src/drive_controller/config/drive_controller.yaml"
 
 docker:
-	# You may need to do these first, if it complains about permissions errors
-	#   sudo usermod -aG docker $USER
-	#   newgrp docker
+	# Legacy convenience target: starts the wake-word service, not ROS.
 	docker compose up -d
-	sleep 5
-	docker exec -it ollama ollama pull tinyllama
 
 build-docker:
 	docker compose build --no-cache
-
-connect:
-	docker compose exec hailo /bin/bash
-
 
 build-rviz:
 	docker compose build rviz

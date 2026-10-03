@@ -24,18 +24,10 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'eyes = senses.eyes:main',
-            'ears = senses.ears:main',
-            'mouth = senses.mouth:main',
-            'brain = senses.brain:main',
-            'screen = senses.screen:main',
             'voice_agent = senses.voice_agent:main',
             'room_markers = senses.room_markers:main',
             'joystick_voice_control = senses.joystick_voice_control:main',
         ],
-    },
-    package_data={
-        'senses': ['resource/*.ppn'],
     },
     include_package_data=True,
 )

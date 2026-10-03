@@ -1,5 +1,10 @@
 # Semantic room context and navigation
 
+> The ROS behavior below is retained from the Pi implementation. These native
+> launch commands are not yet a VENTUNO deployment workflow; see the
+> [migration status](VENTUNO_MIGRATION.md). Launch processes yourself from your
+> terminal after connecting and validating the hardware.
+
 RoboPi separates human map meaning from the occupancy map:
 
 - `maps/house.yaml` and `maps/house.pgm` describe free, occupied, and unknown space.
@@ -10,7 +15,7 @@ RoboPi separates human map meaning from the occupancy map:
 
 ## Agent tools
 
-Both the Strands `brain` node and the Nova/Strands `voice_agent` expose tools to:
+The Nova/Strands `voice_agent` exposes tools to:
 
 - list and describe known rooms;
 - report the robot's map pose and current room;

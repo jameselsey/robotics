@@ -1,37 +1,4 @@
-#version: '3.8'
-
 services:
-  ollama:
-    image: ollama/ollama:latest
-    container_name: ollama
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama_data:/root/.ollama
-    restart: unless-stopped
-
-  # hailo:
-  #   build: hailo
-  #   environment:
-  #     - UDEV=1
-  #   devices:
-  #     - /dev/dri:/dev/dri
-  #     - /dev/hailo0:/dev/hailo0
-  #   volumes:
-  #     - /dev:/dev
-  #     - /lib/firmware:/lib/firmware
-  #     - /run/udev:/run/udev:ro
-  #     - /sys:/sys
-  #   privileged: true
-  #   network_mode: host
-  #   ipc: host
-  #   tty: true
-  #   stdin_open: true
-  #   group_add:
-  #     - 44
-  #   security_opt:
-  #     - apparmor:unconfined
-
   openwakeword:
     image: rhasspy/wyoming-openwakeword:latest
     container_name: openwakeword
@@ -65,6 +32,3 @@ services:
     command: bash -lc "source /opt/ros/jazzy/setup.bash && rviz2"
     profiles:
       - tools
-
-volumes:
-  ollama_data:
