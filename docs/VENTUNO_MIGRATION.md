@@ -7,19 +7,18 @@ unfinished work. The agreed plan originated on 2026-10-03.
 
 ## Current checkpoint
 
-- **Active phase:** 1, repository preservation and cleanup.
-- **Implementation:** phase 1 cleanup complete and verified; ready for review.
-- **User review / commit / push:** pending. No commits, tags, or pushes made by the agent.
-- **Next step:** user reviews the diff, creates/pushes the baseline tag, and
-  commits/pushes the cleanup. Begin phase 2 only when explicitly requested.
+- **Active phase:** 2 checkpoint, awaiting user review.
+- **Implementation:** phase 1 committed at `d4931db`; phase 2 implemented and software-validated.
+- **User review / commit / push:** phase 1 reviewed and pushed by the user. Phase 2 changes will remain uncommitted for review.
+- **Next step:** user reviews/commits/pushes phase 2; start phase 3 only when requested.
 - **Hardware:** the VENTUNO has not been installed on the chassis or wired to its
   motors, encoders, LED, LiDAR, controller, or robot audio devices. Physical
   acceptance remains pending even if individual peripherals appear on the board.
 
 | Phase | Status | Checkpoint |
 | --- | --- | --- |
-| 1. Preserve and clean | Implementation complete | User review, baseline tag, and commit/push pending |
-| 2. ROS packaging/build | Not started | Wait for an explicit request after phase 1 review |
+| 1. Preserve and clean | Committed at `d4931db` | Reviewed/pushed by user; local baseline tag verified |
+| 2. ROS packaging/build | Implemented; review pending | Five packages build; all 67 colcon results pass |
 | 3. Compose infrastructure | Not started | Clean container build and operator workflow |
 | 4. Local voice and MCU | Not started | Mock integration, firmware build, and verified wiring guide |
 | 5. Integration and handoff | Not started | Software acceptance; physical checks performed by user |
@@ -46,9 +45,11 @@ The agreed Pi baseline is **`8100627c087d5cc25e0c40bdf27b5d8a42e131bf`**
 (`Add angular odometry calibration tool`). The local working tree was clean and
 GitHub `main` matched this commit during the planning inventory.
 
-The agent has not created the archive tag. The user should run these commands
-before committing the cleanup; the explicit SHA still selects the original Pi
-code if `main` has moved:
+The local `pi5-final` tag was verified in phase 2 to resolve to the agreed SHA.
+GitHub `main` was verified at `d4931db`; the tag was not returned by the remote
+query, so its publication remains unconfirmed. The agent creates no tags.
+If needed, these user-operated commands preserve the original Pi revision even
+after `main` moves:
 
 ```bash
 git tag -a pi5-final 8100627c087d5cc25e0c40bdf27b5d8a42e131bf -m "Final Raspberry Pi 5 baseline before VENTUNO Q migration"
@@ -248,3 +249,86 @@ in phase 1. Manifest completion, reproducible builds, generated description
 cleanup, MCU support, and local inference remain in their numbered phases.
 
 Suggested phase 1 commit message: `Preserve Pi baseline and clean obsolete robotics experiments`.
+
+## Phase 2 change and validation record
+
+Completed on 2026-10-03; changes remain uncommitted for user review.
+
+- Corrected all five manifests: direct ROS/system dependencies, valid build types,
+  consistent maintainer/license metadata, and focused test dependencies. Removed
+  invented PyPI rosdep keys; application PyPI libraries remain in `requirements.txt`.
+- Python packages use `setuptools` installation metadata and optional pytest extras.
+  ROS resources are installed explicitly; sound effects are no longer inadvertently
+  copied into the Python module as well as package share. CMake resource packages
+  retain their valid build type and avoid redundant package-manifest installation.
+- `tank_description` generates the canonical Xacro into the build tree and installs
+  its URDF. Removed the tracked generated copy, unused older `tank.urdf.xacro`, and
+  empty `view_robot.launch.py`. Canonical geometry is unchanged.
+- Split voice settings, device selection, Nova construction/prompt, and asynchronous
+  session supervision into internal modules. Preserved the ROS adapter, audio/AEC,
+  movement/vision/navigation tools, transcripts, and wake/stop sounds. Cleanup now
+  also joins delayed debug probes and restores sleeping state after setup failures.
+- Added deployment arguments for camera/audio devices, wake-word endpoint, voice
+  YAML, drive YAML, and Foxglove port. Typed ROS parameters avoid interpreting paths
+  or device names as YAML values. Included arguments appear in full bringup.
+- Runtime localization/navigation files respect `ROS_HOME`. Saved-map lookup accepts
+  `ROBOT_MAP_FILE` or a path relative to the launch working directory. Native Make
+  paths are overridable and no longer write generated URDF into tracked source.
+- Added lifecycle/device/config and launch tests; registered launch/description
+  pytest suites with CMake. Added incremental Ruff lint/format checks for 15 files.
+  Updated [package/configuration documentation](../src/README.md) and description
+  validation instructions in the mapping guide.
+
+Validation:
+
+- Built all **five packages** in an isolated ARM64 Ubuntu Noble/ROS Jazzy container,
+  with the repository mounted **read-only**, no hardware mounts, and no network
+  during build/tests. Both regular and `--symlink-install` builds passed.
+- **65 individual pytest checks passed** (colcon reports **67 results** because it
+  also counts the two CTest suite wrappers), with zero failures/errors/skips.
+  This includes existing kinematics, motion/navigation safeguards, semantic rooms,
+  voice/audio tests, new lifecycle/config/device/launch checks, and Xacro/URDFdom.
+- Description tests compare the CMake output with fresh Xacro and parse it with
+  `check_urdf`. Installed robot description, voice YAML, and both sound effects
+  were verified; installed sounds are byte-for-byte identical to source/baseline.
+- `ros2 launch bringup all.launch.py --show-args` passes and exposes nested deployment
+  arguments. This inspects configuration only; no robot processes were launched.
+- `make lint` passes using temporary Ruff **0.15.1**. All **40 Python files** and
+  **five manifests** parse; `git diff --check` passes. Make build/test/state-path
+  recipes were inspected with dry runs.
+- Drive/calibration code and YAML, joystick/deadman configuration, canonical Xacro,
+  rooms and Nav2/SLAM configuration, audio processing/LED, movement and vision tools,
+  and the robot-agent prompt were compared against phase 1 and remain unchanged.
+  Semantic navigation changes are confined to its configurable log path.
+
+The disposable validation image is `robotics-phase2-check` (local image
+`b46e1a6e8e52`), built from official `ros:jazzy-ros-base` at digest
+`sha256:066420e07f60aa18262f2479981def87ebcfcec42eefb0c0c57c4a46098348ca`.
+It contains ROS launch/description/navigation/camera/test tools, not a complete
+production voice installation or vendor LiDAR overlay. Build recipe, output and
+logs are under `/tmp/robotics-phase2`; temporary Ruff is under
+`/tmp/robotics-phase2-tools`. These are local verification artifacts, not project
+runtime requirements. The image remains available for review. Check disk space
+before phase 3 (about 2.9 GiB free after validation); do not prune unrelated images.
+
+To repeat checks while that local image and build output exist:
+
+```bash
+docker run --rm --network none \
+  -v "$PWD:/source:ro" -v /tmp/robotics-phase2:/results \
+  robotics-phase2-check bash /results/validate.sh
+make lint RUFF=/tmp/robotics-phase2-tools/bin/ruff
+```
+
+After reboot, `/tmp` may be gone; phase 3 will add the checked-in reproducible
+container build/test workflow rather than depend on this temporary image.
+No host ROS/application dependencies were installed. No ROS/robotics or existing
+inference services were started, stopped, or restarted; no firmware was flashed.
+
+Remaining gates: phase 3 must install/pin the full voice dependencies and vendor
+code in containers and replace the transitional native workflow. Phase 4 supplies
+local inference and the verified MCU/pin layout. Runtime inference, ROS streaming,
+Foxglove browser checks and physical operation remain unverified. Phase 2 software
+checks do not establish robot readiness.
+
+Suggested phase 2 commit message: `Clean ROS packaging, generated description, and voice configuration`.

@@ -1,0 +1,21 @@
+# Parameters not overridden by named launch arguments. Keep credentials out of YAML.
+voice_agent:
+  ros__parameters:
+    wake_model_name: computer
+    chunk_size: 1280
+    wake_ack_delay: 0.25
+    audio_activity_threshold: 250.0
+    audio_silence_gate_enabled: true
+    audio_silence_gate_threshold: 650.0
+    audio_speech_gate_threshold: 0.6
+    audio_processing_enabled: true
+    audio_processing_stream_delay_ms: -1
+    input_frames_per_buffer: 160
+    output_frames_per_buffer: 160
+    output_prebuffer_chunks: 0
+    mute_input_during_output_seconds: 1.5
+    session_heartbeat_seconds: 5.0
+    led_pin: 19  # Historical Pi BCM pin; MCU adapter replaces this in phase 4.
+    led_pwm_hz: 400
+    led_amp_gain: 3.0
+    led_smooth_alpha: 0.25

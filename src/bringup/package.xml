@@ -2,20 +2,23 @@
 <package format="3">
   <name>bringup</name>
   <version>0.0.1</version>
-  <description>Bringup for joystick and foxglove bridge</description>
-
-  <maintainer email="jelsey@example.com">James Elsey</maintainer>
+  <description>Robot bringup, Foxglove, SLAM, saved-map localization, and Nav2 orchestration</description>
+  <maintainer email="james.elsey@gmail.com">James Elsey</maintainer>
   <license>MIT</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
-  <exec_depend>joy</exec_depend>
+  <exec_depend>ament_index_python</exec_depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>drive_controller</exec_depend>
   <exec_depend>joystick</exec_depend>
+  <exec_depend>senses</exec_depend>
+  <exec_depend>tank_description</exec_depend>
   <exec_depend>foxglove_bridge</exec_depend>
-  <exec_depend>image_transport</exec_depend>
   <exec_depend>tf2_ros</exec_depend>
-  <exec_depend>navigation2</exec_depend>
   <exec_depend>nav2_bringup</exec_depend>
+  <exec_depend>nav2_lifecycle_manager</exec_depend>
   <exec_depend>slam_toolbox</exec_depend>
   <exec_depend>joint_state_publisher</exec_depend>
   <exec_depend>robot_state_publisher</exec_depend>
@@ -25,6 +28,10 @@
   <exec_depend>nav_msgs</exec_depend>
   <exec_depend>sensor_msgs</exec_depend>
   <exec_depend>std_msgs</exec_depend>
+
+  <test_depend>python3-pytest</test_depend>
+  <test_depend>ament_cmake_pytest</test_depend>
+  <test_depend>python3-yaml</test_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

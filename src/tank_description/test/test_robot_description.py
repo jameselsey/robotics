@@ -1,14 +1,13 @@
 """Structural and orientation regression tests for the robot description."""
 
-from pathlib import Path
+import os
 import subprocess
 import tempfile
 import xml.etree.ElementTree as ET
-
+from pathlib import Path
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 XACRO_PATH = PACKAGE_ROOT / "urdf" / "robot.urdf.xacro"
-GENERATED_URDF_PATH = PACKAGE_ROOT / "urdf" / "robot.urdf"
 
 
 def _root(path: Path) -> ET.Element:
@@ -52,7 +51,11 @@ def test_generated_urdf_matches_xacro_and_parses_with_urdfdom():
         capture_output=True,
         text=True,
     ).stdout
-    assert ET.tostring(ET.fromstring(generated)) == ET.tostring(_root(GENERATED_URDF_PATH))
+    # CMake supplies the build-tree artifact; source-only runs still validate Xacro.
+    if os.environ.get("ROBOT_URDF_PATH"):
+        assert ET.tostring(ET.fromstring(generated)) == ET.tostring(
+            _root(Path(os.environ["ROBOT_URDF_PATH"]))
+        )
 
     with tempfile.NamedTemporaryFile(mode="w", suffix=".urdf") as output:
         output.write(generated)

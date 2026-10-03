@@ -54,23 +54,22 @@ The source description is:
 src/tank_description/urdf/robot.urdf.xacro
 ```
 
-Foxglove currently consumes the generated URDF:
+CMake generates the URDF in the build tree and installs it under the
+`tank_description` package share directory. Bringup reads that installed file
+and publishes `/robot_description` for Foxglove. Do not generate URDF into source.
 
-```text
-src/tank_description/urdf/robot.urdf
-```
-
-Generate and validate it with:
+In a ROS development environment, build and validate with:
 
 ```bash
-source /opt/ros/jazzy/setup.bash
-ros2 run xacro xacro \
-  src/tank_description/urdf/robot.urdf.xacro \
-  -o src/tank_description/urdf/robot.urdf
-check_urdf src/tank_description/urdf/robot.urdf
+make build
+source install/setup.bash
+check_urdf "$(ros2 pkg prefix tank_description)/share/tank_description/urdf/robot.urdf"
+make test
 ```
 
-The workspace `make build` target also regenerates the file before invoking `colcon build`.
+The description tests check wheel/enclosure orientation, compare the build artifact
+with fresh Xacro output, and parse it with `check_urdf`. No robot nodes are launched.
+Container build/test commands arrive in migration phase 3.
 
 Check visually that:
 

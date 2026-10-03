@@ -2,21 +2,23 @@
 <package format="3">
   <name>drive_controller</name>
   <version>0.0.1</version>
-  <description>Drives the RoboPi BTS7960 motors and publishes encoder odometry</description>
-
-  <maintainer email="jelsey@example.com">James Elsey</maintainer>
+  <description>Tracked motor control, encoder odometry, diagnostics, and passive calibration</description>
+  <maintainer email="james.elsey@gmail.com">James Elsey</maintainer>
   <license>MIT</license>
 
-  <buildtool_depend>ament_python</buildtool_depend>
+  <buildtool_depend>python3-setuptools</buildtool_depend>
 
+  <exec_depend>ament_index_python</exec_depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
   <exec_depend>rclpy</exec_depend>
   <exec_depend>geometry_msgs</exec_depend>
   <exec_depend>nav_msgs</exec_depend>
   <exec_depend>std_msgs</exec_depend>
-
   <exec_depend>tf2_ros</exec_depend>
   <exec_depend>tf_transformations</exec_depend>
   <exec_depend>python3-gpiozero</exec_depend>
+  <exec_depend>python3-yaml</exec_depend>
 
   <test_depend>python3-pytest</test_depend>
 

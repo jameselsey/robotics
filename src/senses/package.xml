@@ -1,37 +1,40 @@
 <?xml version="1.0"?>
-<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>senses</name>
   <version>0.0.1</version>
-  <description>Sensory, voice-agent, vision, and semantic navigation nodes for RoboPi</description>
+  <description>Robot audio, voice agent, camera, vision, and semantic navigation tools</description>
   <maintainer email="james.elsey@gmail.com">James Elsey</maintainer>
   <license>MIT</license>
 
-  <depend>rclpy</depend>
+  <buildtool_depend>python3-setuptools</buildtool_depend>
 
   <exec_depend>ament_index_python</exec_depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>rclpy</exec_depend>
   <exec_depend>action_msgs</exec_depend>
-  <exec_depend>python3-yaml</exec_depend>
   <exec_depend>tf2_ros</exec_depend>
   <exec_depend>nav_msgs</exec_depend>
   <exec_depend>nav2_msgs</exec_depend>
+  <exec_depend>nav2_bt_navigator</exec_depend>
   <exec_depend>geometry_msgs</exec_depend>
   <exec_depend>sensor_msgs</exec_depend>
   <exec_depend>std_msgs</exec_depend>
   <exec_depend>visualization_msgs</exec_depend>
-
+  <exec_depend>v4l2_camera</exec_depend>
+  <exec_depend>topic_tools</exec_depend>
+  <exec_depend>image_transport_plugins</exec_depend>
+  <exec_depend>sllidar_ros2</exec_depend>
+  <exec_depend>python3-yaml</exec_depend>
   <exec_depend>python3-numpy</exec_depend>
   <exec_depend>python3-pyaudio</exec_depend>
-  <exec_depend>python3-playsound-pip</exec_depend>
-  <exec_depend>strands-agents</exec_depend>
-  <exec_depend>strands-agents-tools</exec_depend>
   <exec_depend>python3-boto3</exec_depend>
-  <!-- aws-sdk-bedrock-runtime is installed from requirements.txt; it has no rosdep key. -->
+  <!-- PyPI-only dependencies (Strands, playsound, AWS SDK, WebRTC) are
+       installed from the root requirements.txt; do not invent rosdep keys. -->
 
   <test_depend>python3-pytest</test_depend>
 
   <export>
     <build_type>ament_python</build_type>
-    <resource>senses</resource>
   </export>
 </package>

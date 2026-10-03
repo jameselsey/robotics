@@ -3,28 +3,24 @@
 import asyncio
 import json
 import logging
-import os
 import select
 import socket
 import threading
 import time
 from pathlib import Path
-from typing import Any
 
-import boto3
 import pyaudio
 import rclpy
 from ament_index_python.packages import get_package_share_directory
 from rclpy.node import Node
 from std_msgs.msg import String
 from strands import tool
-from strands.experimental.bidi import BidiAgent
-from strands.experimental.bidi.models import BidiNovaSonicModel
 from strands.experimental.bidi.types.events import BidiTextInputEvent
-from strands.experimental.bidi.types.io import BidiInput, BidiOutput
 from strands_tools import calculator, current_time
 
+from senses.audio_devices import select_audio_device
 from senses.audio_feedback import LedController, play_sound_with_led
+from senses.conversation_session import run_agent_io, run_session
 from senses.movement_tools import MovementController
 from senses.nova_audio import (
     ActivityTracker,
@@ -33,26 +29,16 @@ from senses.nova_audio import (
     LedAudioOutput,
     PlaybackState,
 )
+from senses.nova_backend import create_nova_agent
 from senses.semantic_map_tools import SemanticMapController
 from senses.vision_tools import VisionController
+from senses.voice_config import declare_voice_config
 from senses.wyoming_protocol import wyoming_recv_event, wyoming_send_event
 
 try:
     from pywebrtc_audio import AudioProcessor
 except Exception:  # pragma: no cover - lets the node run without AEC installed
     AudioProcessor = None
-
-
-def _optional_device_index(value: int) -> int | None:
-    return value if value >= 0 else None
-
-
-def _param_bool(value: Any) -> bool:
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, str):
-        return value.strip().lower() in {"1", "true", "yes", "on"}
-    return bool(value)
 
 
 class VoiceAgent(Node):
@@ -68,91 +54,7 @@ class VoiceAgent(Node):
         self._conversation_stop_event: threading.Event | None = None
         self._conversation_lock = threading.Lock()
 
-        self.declare_parameter("oww_host", "127.0.0.1")
-        self.declare_parameter("oww_port", 10400)
-        self.declare_parameter("wake_model_name", "computer")
-        self.declare_parameter("chunk_size", 1280)
-        self.declare_parameter("input_device_name", "Brio")
-        self.declare_parameter("input_device_index", -1)
-        self.declare_parameter("output_device_index", -1)
-        self.declare_parameter("wake_ack_delay", 0.25)
-
-        self.declare_parameter("aws_profile", os.environ.get("AWS_PROFILE", "default"))
-        self.declare_parameter("aws_region", os.environ.get("AWS_REGION") or os.environ.get("AWS_DEFAULT_REGION", "us-east-1"))
-        self.declare_parameter("nova_model_id", os.environ.get("NOVA_SONIC_MODEL_ID", "amazon.nova-2-sonic-v1:0"))
-        self.declare_parameter("nova_voice", os.environ.get("NOVA_SONIC_VOICE", "amy"))
-        self.declare_parameter("nova_output_rate", int(os.environ.get("NOVA_SONIC_OUTPUT_RATE", "16000")))
-        self.declare_parameter("endpointing_sensitivity", os.environ.get("NOVA_SONIC_ENDPOINTING_SENSITIVITY", "LOW"))
-        self.declare_parameter("temperature", float(os.environ.get("NOVA_SONIC_TEMPERATURE", "0.7")))
-        self.declare_parameter("top_p", float(os.environ.get("NOVA_SONIC_TOP_P", "0.9")))
-        self.declare_parameter("max_tokens", int(os.environ.get("NOVA_SONIC_MAX_TOKENS", "1024")))
-        self.declare_parameter("idle_timeout_seconds", 45.0)
-        self.declare_parameter("max_session_seconds", 420.0)
-        self.declare_parameter("audio_activity_threshold", 250.0)
-        self.declare_parameter("audio_silence_gate_enabled", True)
-        self.declare_parameter("audio_silence_gate_threshold", 650.0)
-        self.declare_parameter("audio_speech_gate_threshold", 0.6)
-        self.declare_parameter("audio_processing_enabled", True)
-        self.declare_parameter("audio_processing_stream_delay_ms", -1)
-        self.declare_parameter("debug_text_probe", os.environ.get("NOVA_SONIC_DEBUG_TEXT_PROBE", ""))
-        self.declare_parameter("session_heartbeat_seconds", 5.0)
-        self.declare_parameter("strands_log_level", os.environ.get("STRANDS_LOG_LEVEL", "DEBUG"))
-        self.declare_parameter("input_frames_per_buffer", 160)
-        self.declare_parameter("output_frames_per_buffer", 160)
-        self.declare_parameter("output_prebuffer_chunks", 0)
-        self.declare_parameter("mute_input_during_output_seconds", 1.5)
-        self.declare_parameter("rooms_config_path", "")
-        self.declare_parameter("vision_enabled", True)
-        self.declare_parameter("vision_topic", os.environ.get("VISION_TOPIC", "/image_viz/compressed"))
-        self.declare_parameter("vision_model_id", os.environ.get("VISION_MODEL_ID", "amazon.nova-lite-v1:0"))
-        self.declare_parameter("vision_frame_timeout_seconds", 3.0)
-
-        self.declare_parameter("led_pin", 19)
-        self.declare_parameter("led_pwm_hz", 400)
-        self.declare_parameter("led_amp_gain", 3.0)
-        self.declare_parameter("led_smooth_alpha", 0.25)
-
-        self.oww_host = str(self.get_parameter("oww_host").value)
-        self.oww_port = int(self.get_parameter("oww_port").value)
-        self.wake_model_name = str(self.get_parameter("wake_model_name").value)
-        self.chunk_size = int(self.get_parameter("chunk_size").value)
-        self.input_device_name = str(self.get_parameter("input_device_name").value)
-        self.input_device_index = int(self.get_parameter("input_device_index").value)
-        self.output_device_index = int(self.get_parameter("output_device_index").value)
-        self.wake_ack_delay = float(self.get_parameter("wake_ack_delay").value)
-
-        self.aws_profile = str(self.get_parameter("aws_profile").value)
-        self.aws_region = str(self.get_parameter("aws_region").value)
-        self.nova_model_id = str(self.get_parameter("nova_model_id").value)
-        self.nova_voice = str(self.get_parameter("nova_voice").value)
-        self.nova_output_rate = int(self.get_parameter("nova_output_rate").value)
-        self.endpointing_sensitivity = str(self.get_parameter("endpointing_sensitivity").value).upper()
-        self.temperature = float(self.get_parameter("temperature").value)
-        self.top_p = float(self.get_parameter("top_p").value)
-        self.max_tokens = int(self.get_parameter("max_tokens").value)
-        self.idle_timeout_seconds = float(self.get_parameter("idle_timeout_seconds").value)
-        self.max_session_seconds = float(self.get_parameter("max_session_seconds").value)
-        self.audio_activity_threshold = float(self.get_parameter("audio_activity_threshold").value)
-        self.audio_silence_gate_enabled = _param_bool(self.get_parameter("audio_silence_gate_enabled").value)
-        self.audio_silence_gate_threshold = float(self.get_parameter("audio_silence_gate_threshold").value)
-        self.audio_speech_gate_threshold = float(self.get_parameter("audio_speech_gate_threshold").value)
-        self.audio_processing_enabled = _param_bool(self.get_parameter("audio_processing_enabled").value)
-        self.debug_text_probe = str(self.get_parameter("debug_text_probe").value).strip()
-        self.session_heartbeat_seconds = float(self.get_parameter("session_heartbeat_seconds").value)
-        self.strands_log_level = str(self.get_parameter("strands_log_level").value).upper()
-        self.input_frames_per_buffer = int(self.get_parameter("input_frames_per_buffer").value)
-        self.output_frames_per_buffer = int(self.get_parameter("output_frames_per_buffer").value)
-        self.audio_processing_stream_delay_ms = int(self.get_parameter("audio_processing_stream_delay_ms").value)
-        if self.audio_processing_stream_delay_ms < 0:
-            self.audio_processing_stream_delay_ms = int(self.output_frames_per_buffer / 16000 * 1000)
-        self.output_prebuffer_chunks = int(self.get_parameter("output_prebuffer_chunks").value)
-        self.mute_input_during_output_seconds = float(self.get_parameter("mute_input_during_output_seconds").value)
-        self.rooms_config_path = str(self.get_parameter("rooms_config_path").value).strip()
-        self.vision_enabled = _param_bool(self.get_parameter("vision_enabled").value)
-        self.vision_topic = str(self.get_parameter("vision_topic").value).strip()
-        self.vision_model_id = str(self.get_parameter("vision_model_id").value).strip()
-        self.vision_frame_timeout_seconds = float(self.get_parameter("vision_frame_timeout_seconds").value)
-
+        self.config = declare_voice_config(self)
         self.RATE = 16000
         self.CHANNELS = 1
         self.WIDTH_BYTES = 2
@@ -161,21 +63,27 @@ class VoiceAgent(Node):
         package_dir = Path(get_package_share_directory("senses"))
         self.sound_path = str(package_dir / "resource" / "r2-sound-acknowledged.mp3")
         self.stop_sound_path = str(package_dir / "resource" / "stop-listening.mp3")
-        if not self.rooms_config_path:
-            self.rooms_config_path = str(package_dir / "config" / "rooms.yaml")
-        self._semantic_map = SemanticMapController(self, self.rooms_config_path)
+        if not self.config.rooms_config_path:
+            self.config.rooms_config_path = str(package_dir / "config" / "rooms.yaml")
+        self._semantic_map = SemanticMapController(
+            self,
+            self.config.rooms_config_path,
+            navigation_log_path=self.config.navigation_log_path,
+        )
         self._vision = VisionController(
             self,
-            topic=self.vision_topic,
-            model_id=self.vision_model_id,
-            aws_profile=self.aws_profile,
-            aws_region=self.aws_region,
-            enabled=self.vision_enabled,
-            frame_timeout_seconds=self.vision_frame_timeout_seconds,
+            topic=self.config.vision_topic,
+            model_id=self.config.vision_model_id,
+            aws_profile=self.config.aws_profile,
+            aws_region=self.config.aws_region,
+            enabled=self.config.vision_enabled,
+            frame_timeout_seconds=self.config.vision_frame_timeout_seconds,
         )
 
         try:
-            logging.getLogger("strands").setLevel(getattr(logging, self.strands_log_level, logging.DEBUG))
+            logging.getLogger("strands").setLevel(
+                getattr(logging, self.config.strands_log_level, logging.DEBUG)
+            )
             logging.getLogger("aws_sdk_bedrock_runtime").setLevel(logging.DEBUG)
             logging.getLogger("smithy").setLevel(logging.DEBUG)
         except Exception:
@@ -183,14 +91,18 @@ class VoiceAgent(Node):
 
         self.pa = pyaudio.PyAudio()
         self._log_audio_devices()
-        self.input_device = self._find_audio_device(self.input_device_name, self.input_device_index)
-        self.output_device = _optional_device_index(self.output_device_index)
+        self.input_device = self._find_audio_device(
+            self.config.input_device_name, self.config.input_device_index
+        )
+        self.output_device = self._find_audio_device(
+            self.config.output_device_name, self.config.output_device_index, direction="output"
+        )
         self.led = LedController(
             self,
-            pin=int(self.get_parameter("led_pin").value),
-            pwm_hz=int(self.get_parameter("led_pwm_hz").value),
-            amp_gain=float(self.get_parameter("led_amp_gain").value),
-            smooth_alpha=float(self.get_parameter("led_smooth_alpha").value),
+            pin=self.config.led_pin,
+            pwm_hz=self.config.led_pwm_hz,
+            amp_gain=self.config.led_amp_gain,
+            smooth_alpha=self.config.led_smooth_alpha,
         )
 
         self._stop = False
@@ -231,19 +143,16 @@ class VoiceAgent(Node):
                     f"Audio device index={i}, inputs={max_input}, outputs={max_output}, name={name}"
                 )
 
-    def _find_audio_device(self, device_name: str, fallback_index: int) -> int | None:
-        self.get_logger().info(f"Searching for audio input device containing '{device_name}'...")
-        for i in range(self.pa.get_device_count()):
-            info = self.pa.get_device_info_by_index(i)
-            name = info.get("name", "")
-            if info.get("maxInputChannels", 0) > 0 and device_name.lower() in name.lower():
-                self.get_logger().info(f"Found audio input device: {name} (index={i})")
-                return i
-        if fallback_index >= 0:
-            self.get_logger().warn(f"Device '{device_name}' not found, using fallback index {fallback_index}")
-            return fallback_index
-        self.get_logger().warn(f"Device '{device_name}' not found, using system default input device")
-        return None
+    def _find_audio_device(self, device_name, fallback_index, direction="input"):
+        devices = [self.pa.get_device_info_by_index(i) for i in range(self.pa.get_device_count())]
+        index = select_audio_device(
+            devices, name=device_name, fallback_index=fallback_index, direction=direction
+        )
+        if index is None:
+            self.get_logger().warn(f"Using system default {direction} device")
+        else:
+            self.get_logger().info(f"Selected audio {direction} device index={index}")
+        return index
 
     def destroy_node(self):
         self._stop = True
@@ -261,21 +170,29 @@ class VoiceAgent(Node):
             sock = None
             mic_stream = None
             try:
-                sock = socket.create_connection((self.oww_host, self.oww_port), timeout=5)
+                sock = socket.create_connection(
+                    (self.config.oww_host, self.config.oww_port), timeout=5
+                )
                 sock.settimeout(None)
-                wyoming_send_event(sock, "detect", {"names": [self.wake_model_name]})
-                wyoming_send_event(sock, "audio-start", {"rate": self.RATE, "width": self.WIDTH_BYTES, "channels": self.CHANNELS})
+                wyoming_send_event(sock, "detect", {"names": [self.config.wake_model_name]})
+                wyoming_send_event(
+                    sock,
+                    "audio-start",
+                    {"rate": self.RATE, "width": self.WIDTH_BYTES, "channels": self.CHANNELS},
+                )
 
                 mic_stream = self.pa.open(
                     format=self.FORMAT,
                     channels=self.CHANNELS,
                     rate=self.RATE,
                     input=True,
-                    frames_per_buffer=self.chunk_size,
+                    frames_per_buffer=self.config.chunk_size,
                     input_device_index=self.input_device,
                 )
 
-                self.get_logger().info(f"Listening for wake word '{self.wake_model_name}'...")
+                self.get_logger().info(
+                    f"Listening for wake word '{self.config.wake_model_name}'..."
+                )
                 detected = False
                 detected_name = None
 
@@ -286,7 +203,7 @@ class VoiceAgent(Node):
                         detected_name = "controller"
                         break
 
-                    pcm_bytes = mic_stream.read(self.chunk_size, exception_on_overflow=False)
+                    pcm_bytes = mic_stream.read(self.config.chunk_size, exception_on_overflow=False)
                     wyoming_send_event(
                         sock,
                         "audio-chunk",
@@ -301,7 +218,7 @@ class VoiceAgent(Node):
                     event_type, data, _payload = wyoming_recv_event(sock)
                     if event_type == "detection":
                         detected = True
-                        detected_name = data.get("name") or self.wake_model_name
+                        detected_name = data.get("name") or self.config.wake_model_name
                         break
                     if event_type == "not-detected":
                         break
@@ -322,7 +239,7 @@ class VoiceAgent(Node):
                 self.get_logger().info(f"Wake word detected (model={detected_name})")
                 self._publish_state("wake_detected")
                 play_sound_with_led(self, self.led, self.sound_path, "wake")
-                time.sleep(self.wake_ack_delay)
+                time.sleep(self.config.wake_ack_delay)
 
                 conversation_reason = asyncio.run(self._run_conversation())
                 if conversation_reason == "stop requested":
@@ -346,19 +263,6 @@ class VoiceAgent(Node):
                 except Exception:
                     pass
 
-    def _provider_config(self) -> dict[str, Any]:
-        config: dict[str, Any] = {
-            "audio": {"voice": self.nova_voice, "output_rate": self.nova_output_rate},
-            "inference": {
-                "max_tokens": self.max_tokens,
-                "top_p": self.top_p,
-                "temperature": self.temperature,
-            },
-        }
-        if self.endpointing_sensitivity and "nova-2" in self.nova_model_id:
-            config["turn_detection"] = {"endpointingSensitivity": self.endpointing_sensitivity}
-        return config
-
     def _make_sleep_tool(self, stop_event: threading.Event):
         @tool
         def go_to_sleep() -> str:
@@ -368,14 +272,6 @@ class VoiceAgent(Node):
 
         return go_to_sleep
 
-    async def _idle_watch(self, activity: ActivityTracker, stop_event: threading.Event) -> str:
-        while not stop_event.is_set():
-            await asyncio.sleep(1.0)
-            if self.idle_timeout_seconds > 0 and activity.idle_seconds() >= self.idle_timeout_seconds:
-                stop_event.set()
-                return "idle timeout"
-        return "stop requested"
-
     async def _session_heartbeat(
         self,
         activity: ActivityTracker,
@@ -384,7 +280,7 @@ class VoiceAgent(Node):
         audio_output: LedAudioOutput,
     ) -> str:
         while not stop_event.is_set():
-            await asyncio.sleep(max(1.0, self.session_heartbeat_seconds))
+            await asyncio.sleep(max(1.0, self.config.session_heartbeat_seconds))
             self.get_logger().debug(
                 f"Nova heartbeat idle={activity.idle_seconds():.1f}s, "
                 f"input_chunks={audio_input.chunk_count}, active_input={audio_input.active_chunk_count}, "
@@ -395,116 +291,35 @@ class VoiceAgent(Node):
             )
         return "heartbeat stopped"
 
-    async def _run_agent_loop(self, agent: BidiAgent, inputs: list[BidiInput], outputs: list[BidiOutput]) -> None:
-        stopping_io = threading.Event()
-
-        async def start_io() -> None:
-            for io in [*inputs, *outputs]:
-                start = getattr(io, "start", None)
-                if start is not None:
-                    await start(agent)
-
-        async def stop_io() -> None:
-            for io in [*inputs, *outputs]:
-                stop = getattr(io, "stop", None)
-                if stop is not None:
-                    try:
-                        await stop()
-                    except Exception as exc:
-                        self.get_logger().warn(f"IO stop failed for {type(io).__name__}: {type(exc).__name__}: {exc}")
-
-        async def run_inputs() -> None:
-            try:
-                while True:
-                    for input_ in inputs:
-                        event = await input_()
-                        await agent.send(event)
-            except asyncio.CancelledError:
-                raise
-            except Exception as exc:
-                if stopping_io.is_set():
-                    self.get_logger().debug(f"Nova input/send loop stopped during shutdown: {type(exc).__name__}: {exc}")
-                    return
-                self.get_logger().error(f"Nova input/send loop failed: {type(exc).__name__}: {exc}")
-                raise
-
-        async def run_outputs(inputs_task: asyncio.Task) -> None:
-            try:
-                async for event in agent.receive():
-                    event_type = event.get("type", type(event).__name__) if isinstance(event, dict) else type(event).__name__
-                    self.get_logger().debug(f"Nova event received: {event_type}")
-                    if isinstance(event, dict) and event_type == "bidi_transcript_stream":
-                        transcript = {
-                            "role": event.get("role"),
-                            "text": event.get("text") or event.get("current_transcript") or "",
-                            "is_final": bool(event.get("is_final", False)),
-                        }
-                        message = String()
-                        message.data = json.dumps(transcript, sort_keys=True)
-                        self.transcript_pub.publish(message)
-                        if transcript["is_final"] and transcript["text"]:
-                            self.get_logger().info(
-                                f"Nova transcript [{transcript['role'] or 'unknown'}]: "
-                                f"{transcript['text']}"
-                            )
-                    await asyncio.gather(*[output(event) for output in outputs])
-                self.get_logger().warn("Nova receive loop ended without an exception.")
-            except asyncio.CancelledError:
-                raise
-            except Exception as exc:
-                self.get_logger().error(f"Nova receive loop failed: {type(exc).__name__}: {exc}")
-                raise
-            finally:
-                inputs_task.cancel()
-
-        self.get_logger().info("Starting explicit Nova Sonic agent loop...")
-        inputs_task: asyncio.Task | None = None
-        outputs_task: asyncio.Task | None = None
-        try:
-            await agent.start()
-            self.get_logger().info("Nova Sonic agent.start() completed.")
-            await start_io()
-            inputs_task = asyncio.create_task(run_inputs())
-            outputs_task = asyncio.create_task(run_outputs(inputs_task))
-            done, pending = await asyncio.wait({inputs_task, outputs_task}, return_when=asyncio.FIRST_EXCEPTION)
-            for task in done:
-                if task.cancelled():
-                    continue
-                exc = task.exception()
-                if exc is not None:
-                    raise exc
-            self.get_logger().warn("Nova agent IO tasks ended cleanly; this usually means the model stream closed.")
-        finally:
-            stopping_io.set()
-            for task in (inputs_task, outputs_task):
-                if task is not None and not task.done():
-                    task.cancel()
-            await asyncio.gather(
-                *[task for task in (inputs_task, outputs_task) if task is not None],
-                return_exceptions=True,
-            )
-            try:
-                await asyncio.wait_for(agent.stop(), timeout=8.0)
-                self.get_logger().info("Nova Sonic agent.stop() completed.")
-            except asyncio.TimeoutError:
-                self.get_logger().warn("Timed out waiting for Nova Sonic agent.stop().")
-            except Exception as exc:
-                self.get_logger().warn(f"Nova Sonic agent.stop() failed: {type(exc).__name__}: {exc}")
-            finally:
-                await stop_io()
+    def _publish_transcript(self, transcript):
+        message = String()
+        message.data = json.dumps(transcript, sort_keys=True)
+        self.transcript_pub.publish(message)
 
     async def _run_conversation(self):
         self._publish_state("conversation")
         stop_event = threading.Event()
         with self._conversation_lock:
             self._conversation_stop_event = stop_event
+        try:
+            return await self._run_nova_session(stop_event)
+        finally:
+            stop_event.set()
+            with self._conversation_lock:
+                if self._conversation_stop_event is stop_event:
+                    self._conversation_stop_event = None
+            self._publish_state("sleeping")
+
+    async def _run_nova_session(self, stop_event):
         activity = ActivityTracker()
         playback_state = PlaybackState()
         far_end_buffer = FarEndReferenceBuffer()
         audio_processor = None
-        if self.audio_processing_enabled:
+        if self.config.audio_processing_enabled:
             if AudioProcessor is None:
-                self.get_logger().warn("pywebrtc-audio is not installed; AEC/noise suppression disabled.")
+                self.get_logger().warn(
+                    "pywebrtc-audio is not installed; AEC/noise suppression disabled."
+                )
             else:
                 # pywebrtc-audio wraps WebRTC AEC/NS/AGC. It expects 10 ms mono PCM frames at 16 kHz.
                 audio_processor = AudioProcessor(
@@ -513,45 +328,13 @@ class VoiceAgent(Node):
                     echo_cancellation=True,
                     noise_suppression=True,
                     auto_gain_control=True,
-                    stream_delay_ms=self.audio_processing_stream_delay_ms,
+                    stream_delay_ms=self.config.audio_processing_stream_delay_ms,
                 )
                 self.get_logger().info(
                     f"WebRTC audio processing enabled: AEC+NS+AGC, "
-                    f"stream_delay_ms={self.audio_processing_stream_delay_ms}"
+                    f"stream_delay_ms={self.config.audio_processing_stream_delay_ms}"
                 )
 
-        boto_session = boto3.Session(profile_name=self.aws_profile or None, region_name=self.aws_region)
-        model = BidiNovaSonicModel(
-            model_id=self.nova_model_id,
-            client_config={"boto_session": boto_session},
-            provider_config=self._provider_config(),
-        )
-
-        system_prompt = (
-            "You are a witty robot assistant in a physical robot body. "
-            "Use British English and keep spoken responses short, conversational, and easy to understand. "
-            "Default to one or two spoken sentences. "
-            "For simple factual or maths questions, answer in one sentence and then stop. "
-            "Your personality is a dry, cheeky, slightly world-weary British sci-fi computer: "
-            "overqualified for simple requests, mildly unimpressed by human decision-making, "
-            "and fond of quick deadpan asides. "
-            "Use light sarcasm and playful understatement often, but do not insult the user, derail the answer, "
-            "or sacrifice safety, accuracy, or clarity for a joke. "
-            "Answer ordinary conversation and general knowledge questions directly. "
-            "Use at most one brief witty aside, and only if it does not add extra rambling. "
-            "For movement requests, call the appropriate robot movement tool. Use drive_forward_distance or drive_backward_distance when the user specifies metres/feet or asks to move a distance. "
-            "For room, map annotation, location, or navigation questions, use the semantic map tools before answering. "
-            "Use list_known_rooms or describe_room_annotations when asked what rooms are available or what is annotated. "
-            "Use what_room_am_i_in or where_am_i_on_the_map for questions like what room are you in or where are you. "
-            "Use plan_route_to_room when asked to plan, preview, calculate, or show a route; that tool displays a path and never moves the robot. "
-            "A request to plan a route is not permission to move: never call navigate_to_room or any movement tool for it. "
-            "Use navigate_to_room only when the user explicitly asks the robot to go, drive, move, travel, or navigate to a room; it only uses reviewed navigation poses and must not guess ambiguous room names. "
-            "Use get_navigation_status when asked whether navigation is ready or complete. When asked to stop autonomous navigation, call cancel_navigation and stop_robot. "
-            "For visual questions, use inspect_camera_view before answering. "
-            "Visual questions include what can you see, what am I holding, describe the scene, read this, or identify an object. "
-            "Only call tools when the user clearly asks for movement, room location, navigation, vision, time, calculation, or sleep. "
-            "If the user says 'go to sleep', 'stop listening', or 'that's all', call go_to_sleep."
-        )
         tools = (
             [calculator, current_time]
             + self._movement.make_tools()
@@ -559,19 +342,19 @@ class VoiceAgent(Node):
             + self._vision.make_tools()
             + [self._make_sleep_tool(stop_event)]
         )
-        agent = BidiAgent(model=model, tools=tools, system_prompt=system_prompt)
+        agent = create_nova_agent(self.config, tools)
 
         audio_input = DirectAudioInput(
             node=self,
             activity=activity,
             input_device_index=self.input_device,
-            frames_per_buffer=self.input_frames_per_buffer,
-            threshold=self.audio_activity_threshold,
-            silence_gate_threshold=self.audio_silence_gate_threshold,
-            silence_gate_enabled=self.audio_silence_gate_enabled,
-            speech_gate_threshold=self.audio_speech_gate_threshold,
+            frames_per_buffer=self.config.input_frames_per_buffer,
+            threshold=self.config.audio_activity_threshold,
+            silence_gate_threshold=self.config.audio_silence_gate_threshold,
+            silence_gate_enabled=self.config.audio_silence_gate_enabled,
+            speech_gate_threshold=self.config.audio_speech_gate_threshold,
             playback_state=playback_state,
-            mute_during_output_seconds=self.mute_input_during_output_seconds,
+            mute_during_output_seconds=self.config.mute_input_during_output_seconds,
             audio_processor=audio_processor,
             far_end_buffer=far_end_buffer,
         )
@@ -583,66 +366,44 @@ class VoiceAgent(Node):
             far_end_buffer=far_end_buffer,
             audio_processor=audio_processor,
             output_device_index=self.output_device,
-            output_frames_per_buffer=self.output_frames_per_buffer,
-            prebuffer_chunks=self.output_prebuffer_chunks,
+            output_frames_per_buffer=self.config.output_frames_per_buffer,
+            prebuffer_chunks=self.config.output_prebuffer_chunks,
         )
 
         self.get_logger().info(
-            f"Starting Nova Sonic session model={self.nova_model_id}, region={self.aws_region}, "
-            f"profile={self.aws_profile}, endpointing={self.endpointing_sensitivity}, "
-            f"output_rate={self.nova_output_rate}, silence_gate={self.audio_silence_gate_enabled}, "
-            f"gate_threshold={self.audio_silence_gate_threshold}, audio_processing={self.audio_processing_enabled}"
+            f"Starting Nova Sonic session model={self.config.nova_model_id}, region={self.config.aws_region}, "
+            f"profile={self.config.aws_profile}, endpointing={self.config.endpointing_sensitivity}, "
+            f"output_rate={self.config.nova_output_rate}, silence_gate={self.config.audio_silence_gate_enabled}, "
+            f"gate_threshold={self.config.audio_silence_gate_threshold}, audio_processing={self.config.audio_processing_enabled}"
         )
 
-        run_task = asyncio.create_task(self._run_agent_loop(agent, [audio_input], [audio_output]))
-        if self.debug_text_probe:
-            async def send_text_probe() -> None:
+        probe = None
+        if self.config.debug_text_probe:
+
+            async def send_text_probe():
                 await asyncio.sleep(2.0)
-                self.get_logger().info(f"Sending Nova debug text probe: {self.debug_text_probe}")
-                await agent.send(BidiTextInputEvent(text=self.debug_text_probe, role="user"))
-            asyncio.create_task(send_text_probe())
-        stop_task = asyncio.create_task(asyncio.to_thread(stop_event.wait))
-        idle_task = asyncio.create_task(self._idle_watch(activity, stop_event))
-        heartbeat_task = asyncio.create_task(self._session_heartbeat(activity, stop_event, audio_input, audio_output))
-        max_task = asyncio.create_task(asyncio.sleep(self.max_session_seconds))
+                self.get_logger().info(
+                    f"Sending Nova debug text probe: {self.config.debug_text_probe}"
+                )
+                await agent.send(BidiTextInputEvent(text=self.config.debug_text_probe, role="user"))
 
-        done, pending = await asyncio.wait(
-            {run_task, stop_task, idle_task, heartbeat_task, max_task},
-            return_when=asyncio.FIRST_COMPLETED,
+            probe = send_text_probe()
+        return await run_session(
+            run_agent_io(
+                agent,
+                [audio_input],
+                [audio_output],
+                logger=self.get_logger(),
+                publish_transcript=self._publish_transcript,
+            ),
+            stop_event=stop_event,
+            activity=activity,
+            idle_timeout_seconds=self.config.idle_timeout_seconds,
+            max_session_seconds=self.config.max_session_seconds,
+            heartbeat=self._session_heartbeat(activity, stop_event, audio_input, audio_output),
+            probe=probe,
+            logger=self.get_logger(),
         )
-
-        if run_task in done and not run_task.cancelled():
-            exc = run_task.exception()
-            if exc is not None:
-                self.get_logger().error(f"Nova Sonic agent task failed: {type(exc).__name__}: {exc}")
-
-        reason = "session ended"
-        if max_task in done:
-            reason = "max session duration"
-        elif idle_task in done:
-            try:
-                reason = idle_task.result()
-            except Exception:
-                reason = "idle watcher ended"
-        elif stop_task in done:
-            reason = "stop requested"
-        elif run_task in done:
-            reason = "agent run completed"
-
-        self.get_logger().info(f"Stopping Nova Sonic session: {reason}")
-        stop_event.set()
-
-        if not run_task.done():
-            run_task.cancel()
-        for task in pending:
-            if task is not run_task:
-                task.cancel()
-        await asyncio.gather(run_task, stop_task, idle_task, heartbeat_task, max_task, return_exceptions=True)
-        with self._conversation_lock:
-            if self._conversation_stop_event is stop_event:
-                self._conversation_stop_event = None
-        self._publish_state("sleeping")
-        return reason
 
 
 def main(args=None):

@@ -5,6 +5,10 @@ VENV_DIR = ros_venv
 VENV_PYTHON = $(VENV_DIR)/bin/python3
 VENV_PIP = $(VENV_DIR)/bin/pip
 VENV_ACTIVATE = . $(VENV_DIR)/bin/activate
+ROS_SETUP ?= /opt/ros/jazzy/setup.bash
+VENDOR_SETUP ?= $(HOME)/vendor_ws/install/setup.bash
+ROS_STATE_DIR ?= $(if $(ROS_HOME),$(ROS_HOME),$(HOME)/.ros)
+NAVIGATION_LOG ?= $(ROS_STATE_DIR)/robopi/navigation_events.jsonl
 ARGS ?=
 MAP_NAME ?= house
 MAP_DIR ?= maps
@@ -42,56 +46,52 @@ install-deps: venv
 	PIP_BREAK_SYSTEM_PACKAGES=1 rosdep install -yr --from-paths . --as-root pip:false
 
 test:
-	@bash -c "source /opt/ros/jazzy/setup.bash && source $(VENV_DIR)/bin/activate && source install/setup.bash && colcon test --event-handlers console_direct+ && colcon test-result --verbose"
+	@bash -c "source $(ROS_SETUP) && source $(VENV_DIR)/bin/activate && source install/setup.bash && colcon test --event-handlers console_direct+ && colcon test-result --verbose"
 
 health:
-	@bash -c "source /opt/ros/jazzy/setup.bash && source install/setup.bash && timeout 8 ros2 topic echo /foxglove_health --once --full-length"
+	@bash -c "source $(ROS_SETUP) && source install/setup.bash && timeout 8 ros2 topic echo /foxglove_health --once --full-length"
 
-build: 
-	# we have to compile the urdf file from the xacro, because urdf is what foxglove requires
-	ros2 run xacro xacro src/tank_description/urdf/robot.urdf.xacro > src/tank_description/urdf/robot.urdf
-	@echo "🔨 Building with venv activated..."
-	@bash -c "colcon build --symlink-install"
-	@echo "✅ Build complete."
+build:
+	@bash -c "source $(ROS_SETUP) && $(VENV_ACTIVATE) && colcon build --symlink-install"
 
 launch-joystick:
-	@bash -c "$(VENV_ACTIVATE) && source install/setup.bash && source ~/vendor_ws/install/setup.bash && ros2 launch joystick joystick.launch.py"
+	@bash -c "$(VENV_ACTIVATE) && source install/setup.bash && source $(VENDOR_SETUP) && ros2 launch joystick joystick.launch.py"
 
 launch-drive:
-	@bash -c "$(VENV_ACTIVATE) && source install/setup.bash && source ~/vendor_ws/install/setup.bash && ros2 launch drive_controller drive_controller.launch.py"
+	@bash -c "$(VENV_ACTIVATE) && source install/setup.bash && source $(VENDOR_SETUP) && ros2 launch drive_controller drive_controller.launch.py"
 
 launch-senses:
-	@bash -c "source /opt/ros/jazzy/setup.bash && source install/setup.bash && source ~/vendor_ws/install/setup.bash && ros2 launch senses senses.launch.py"
+	@bash -c "source $(ROS_SETUP) && source install/setup.bash && source $(VENDOR_SETUP) && ros2 launch senses senses.launch.py"
 
 launch-senses-desk:
 	@echo "Launching senses without LiDAR for desk testing."
-	@bash -c "source /opt/ros/jazzy/setup.bash && source install/setup.bash && source ~/vendor_ws/install/setup.bash && ros2 launch senses senses.launch.py enable_lidar:=false"
+	@bash -c "source $(ROS_SETUP) && source install/setup.bash && source $(VENDOR_SETUP) && ros2 launch senses senses.launch.py enable_lidar:=false"
 
 launch:
-	@flock -n -E 73 /tmp/robopi-bringup.lock bash -c "$(VENV_ACTIVATE) && source install/setup.bash && source ~/vendor_ws/install/setup.bash && ros2 launch bringup all.launch.py $(ARGS)" || { status=$$?; if [ $$status -eq 73 ]; then echo "RoboPi bringup is already running; stop it before launching another instance."; fi; exit $$status; }
+	@flock -n -E 73 /tmp/robopi-bringup.lock bash -c "$(VENV_ACTIVATE) && source install/setup.bash && source $(VENDOR_SETUP) && ros2 launch bringup all.launch.py $(ARGS)" || { status=$$?; if [ $$status -eq 73 ]; then echo "RoboPi bringup is already running; stop it before launching another instance."; fi; exit $$status; }
 
 launch-navigation:
-	@flock -n -E 73 /tmp/robopi-bringup.lock bash -c "$(VENV_ACTIVATE) && source install/setup.bash && source ~/vendor_ws/install/setup.bash && ros2 launch bringup all.launch.py enable_navigation:=true $(ARGS)" || { status=$$?; if [ $$status -eq 73 ]; then echo "RoboPi bringup is already running; stop it before launching another instance."; fi; exit $$status; }
+	@flock -n -E 73 /tmp/robopi-bringup.lock bash -c "$(VENV_ACTIVATE) && source install/setup.bash && source $(VENDOR_SETUP) && ros2 launch bringup all.launch.py enable_navigation:=true $(ARGS)" || { status=$$?; if [ $$status -eq 73 ]; then echo "RoboPi bringup is already running; stop it before launching another instance."; fi; exit $$status; }
 
 launch-localized:
 	@test -f "$(MAP_DIR)/$(MAP_NAME).yaml" || (echo "Missing saved map: $(MAP_DIR)/$(MAP_NAME).yaml" && exit 1)
-	@flock -n -E 73 /tmp/robopi-bringup.lock bash -c "$(VENV_ACTIVATE) && source install/setup.bash && source ~/vendor_ws/install/setup.bash && ros2 launch bringup all.launch.py use_saved_map:=true enable_navigation:=true saved_map_file:=$(abspath $(MAP_DIR)/$(MAP_NAME).yaml) $(ARGS)" || { status=$$?; if [ $$status -eq 73 ]; then echo "RoboPi bringup is already running; stop it before launching another instance."; fi; exit $$status; }
+	@flock -n -E 73 /tmp/robopi-bringup.lock bash -c "$(VENV_ACTIVATE) && source install/setup.bash && source $(VENDOR_SETUP) && ros2 launch bringup all.launch.py use_saved_map:=true enable_navigation:=true saved_map_file:=$(abspath $(MAP_DIR)/$(MAP_NAME).yaml) $(ARGS)" || { status=$$?; if [ $$status -eq 73 ]; then echo "RoboPi bringup is already running; stop it before launching another instance."; fi; exit $$status; }
 
 save-map:
 	@mkdir -p $(MAP_DIR)
 	@echo "Saving SLAM map to $(MAP_DIR)/$(MAP_NAME).yaml and $(MAP_DIR)/$(MAP_NAME).pgm"
-	@bash -c "source /opt/ros/jazzy/setup.bash && source install/setup.bash && ros2 lifecycle set /slam_toolbox configure >/dev/null 2>&1 || true && ros2 lifecycle set /slam_toolbox activate >/dev/null 2>&1 || true && timeout $(MAP_WAIT_TIMEOUT) bash -c 'until ros2 topic echo $(MAP_TOPIC) --once >/dev/null 2>&1; do sleep 1; done' && ros2 run nav2_map_server map_saver_cli -t $(MAP_TOPIC) -f $(MAP_DIR)/$(MAP_NAME) --ros-args -p save_map_timeout:=$(MAP_SAVE_TIMEOUT)"
+	@bash -c "source $(ROS_SETUP) && source install/setup.bash && ros2 lifecycle set /slam_toolbox configure >/dev/null 2>&1 || true && ros2 lifecycle set /slam_toolbox activate >/dev/null 2>&1 || true && timeout $(MAP_WAIT_TIMEOUT) bash -c 'until ros2 topic echo $(MAP_TOPIC) --once >/dev/null 2>&1; do sleep 1; done' && ros2 run nav2_map_server map_saver_cli -t $(MAP_TOPIC) -f $(MAP_DIR)/$(MAP_NAME) --ros-args -p save_map_timeout:=$(MAP_SAVE_TIMEOUT)"
 
 publish-room-markers:
-	@bash -c "source /opt/ros/jazzy/setup.bash && source install/setup.bash && ros2 run senses room_markers --ros-args -p rooms_config_path:=$(ROOMS_CONFIG)"
+	@bash -c "source $(ROS_SETUP) && source install/setup.bash && ros2 run senses room_markers --ros-args -p rooms_config_path:=$(ROOMS_CONFIG)"
 
 navigation-log:
-	@mkdir -p ~/.ros/robopi
-	@touch ~/.ros/robopi/navigation_events.jsonl
-	@tail -n 100 -f ~/.ros/robopi/navigation_events.jsonl
+	@mkdir -p "$(dir $(NAVIGATION_LOG))"
+	@touch "$(NAVIGATION_LOG)"
+	@tail -n 100 -f "$(NAVIGATION_LOG)"
 
 calibrate-angular:
-	@bash -c "source /opt/ros/jazzy/setup.bash && source install/setup.bash && ros2 run drive_controller calibrate_angular --config src/drive_controller/config/drive_controller.yaml"
+	@bash -c "source $(ROS_SETUP) && source install/setup.bash && ros2 run drive_controller calibrate_angular --config src/drive_controller/config/drive_controller.yaml"
 
 docker:
 	# Legacy convenience target: starts the wake-word service, not ROS.
@@ -106,3 +106,17 @@ build-rviz:
 rviz:
 	@echo "Starting RViz in Docker. On macOS, start XQuartz and run: xhost +localhost"
 	DISPLAY=$${DISPLAY:-host.docker.internal:0} docker compose --profile tools run --rm rviz
+
+# Temporary host tooling or the phase-3 build image may provide Ruff.
+RUFF ?= ruff
+LINT_FILES = src/senses/senses/voice_agent.py src/senses/senses/voice_config.py \
+	src/senses/senses/nova_backend.py src/senses/senses/conversation_session.py \
+	src/senses/senses/audio_devices.py src/senses/test/test_voice_config.py \
+	src/senses/test/test_conversation_session.py src/senses/launch \
+	src/bringup/launch/all.launch.py src/bringup/launch/localization.launch.py \
+	src/bringup/test src/tank_description/test src/senses/setup.py \
+	src/drive_controller/setup.py
+.PHONY: lint clean-venv install-deps launch-drive
+lint:
+	$(RUFF) check $(LINT_FILES)
+	$(RUFF) format --check $(LINT_FILES)

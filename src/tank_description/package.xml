@@ -2,21 +2,20 @@
 <package format="3">
   <name>tank_description</name>
   <version>0.0.1</version>
-  <description>URDF model and launch files for the Xiaor Geek tank robot</description>
-  <maintainer email="james.elsey@example.com">James Elsey</maintainer>
+  <description>Canonical Xacro and generated URDF for the Xiaor Geek tank robot</description>
+  <maintainer email="james.elsey@gmail.com">James Elsey</maintainer>
   <license>MIT</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
+  <build_depend>xacro</build_depend>
 
   <exec_depend>robot_state_publisher</exec_depend>
-  <exec_depend>joint_state_publisher_gui</exec_depend>
-  <exec_depend>rviz2</exec_depend>
-  <exec_depend>xacro</exec_depend>
+
+  <test_depend>python3-pytest</test_depend>
+  <test_depend>ament_cmake_pytest</test_depend>
+  <test_depend>liburdfdom-tools</test_depend>
 
   <export>
     <build_type>ament_cmake</build_type>
   </export>
-  <test_depend>ament_cmake_pytest</test_depend>
-  <test_depend>urdf</test_depend>
-
 </package>

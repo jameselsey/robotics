@@ -2,6 +2,7 @@
 
 import json
 import math
+import os
 from pathlib import Path
 import re
 import time
@@ -186,7 +187,7 @@ def _polygon_centroid(polygon: list[list[float]]) -> tuple[float, float]:
 class SemanticMapController:
     """Connects SLAM's map frame to human room labels and Nav2 goals."""
 
-    def __init__(self, ros_node, config_path: str):
+    def __init__(self, ros_node, config_path: str, *, navigation_log_path=None):
         self._node = ros_node
         self._config_path = Path(config_path)
         self._tf_buffer = Buffer()
@@ -202,8 +203,9 @@ class SemanticMapController:
         self._localization_covariance = None
         self._spin_only_started_at = None
         self._last_feedback_log_at = 0.0
-        self._navigation_log_path = (
-            Path.home() / ".ros" / "robopi" / "navigation_events.jsonl"
+        self._navigation_log_path = Path(navigation_log_path) if navigation_log_path else (
+            Path(os.environ.get("ROS_HOME") or Path.home() / ".ros")
+            / "robopi" / "navigation_events.jsonl"
         )
         self._plan_publisher = ros_node.create_publisher(NavPath, "/plan", 10)
         self._diagnostics_publisher = ros_node.create_publisher(
